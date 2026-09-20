@@ -61,14 +61,37 @@
    fixed it. */
 #root {
   width: 100%;
+  height: 100%;
   display: flex;
   justify-content: center;
 }
 
+/* 🚨 THE PAGE ITSELF MUST NOT SCROLL. Ported from BLOC (bloc-app/index.html),
+   which paid for this over several rounds on real hardware.
+
+   --app-height is `visualViewport.height + safe-area-inset-top`, so the shell
+   is deliberately TALLER than the visible area — the extra covers the status
+   bar, and `.app` pads it back out below. But with html/body scrollable, that
+   extra height made the whole PAGE scroll: the tab bar drifted with the
+   content and the darker body colour showed as a band under the status bar
+   (Adam, on device, 2026-09-20).
+
+   Locking the page is also what lets the tab bar stay put without
+   `position: fixed`. BLOC's note: `fixed` on iOS standalone relies on
+   WebKit's own internal sense of the viewport, which is stale on first paint
+   until a real scroll forces a recompute — and locking the page removes the
+   scroll that used to hide it. html, body and .app are now all sized from the
+   SAME source, so there is no mismatch left for that class of bug to come
+   from.
+
+   The background is --ground, not a darker shade: an iOS rubber-band reveals
+   whatever is behind the app, and that should be the app's own colour. */
 html, body {
   margin: 0;
-  height: 100%;
-  background: #E9E1D5;
+  height: var(--app-height, 100%);
+  overflow: hidden;
+  overscroll-behavior: none;
+  background: var(--ground);
 }
 
 body {
@@ -97,6 +120,11 @@ button, .row, .listhead { -webkit-tap-highlight-color: transparent; }
      a phone MOCKUP and that constraint belonged to the mockup, not the app
      (Adam, 2026-09-20). */
   height: var(--app-height);
+  /* The safe-top the JS added to --app-height is paid back here, so the
+     content box is exactly the visible viewport and the tab bar lands on the
+     real bottom edge. `box-sizing: border-box` (set globally) is what makes
+     that arithmetic work. */
+  padding-top: var(--safe-top);
   position: relative;
   overflow: hidden;
   display: flex;
@@ -118,7 +146,8 @@ header {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: calc(18px + var(--safe-top)) 20px 10px;
+  /* No safe-top here: .app now absorbs it, so this is plain spacing. */
+  padding: 18px 20px 10px;
   flex-shrink: 0;
   width: 100%;
 }
@@ -389,7 +418,12 @@ input[type=date] {
 
 /* ---------- tab bar ---------- */
 nav {
+  /* flex-shrink: 0 so a long list can never squeeze the tab bar, and
+     position: relative + z-index so it always paints above scrolled content
+     rather than being overlapped at the seam. */
   flex-shrink: 0;
+  position: relative;
+  z-index: 10;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
