@@ -105,9 +105,12 @@ button, .row, .listhead { -webkit-tap-highlight-color: transparent; }
 }
 
 /* Content stays readable when the window is wide: the shell fills, the
-   content column does not stretch to arm's length. */
-.stack, header > .grow, .sheet > * { max-width: 720px; }
-header, main > .stack { margin-left: auto; margin-right: auto; }
+   content column does not stretch to arm's length.
+   The HEADER is deliberately NOT in that column — the brand sits hard left
+   and the account button hard right, across the full width (Adam,
+   2026-09-20). */
+.stack, .sheet > * { max-width: 720px; }
+main > .stack { margin-left: auto; margin-right: auto; }
 .sheet { align-items: stretch; }
 
 /* ---------- header ---------- */
@@ -117,6 +120,7 @@ header {
   gap: 12px;
   padding: calc(18px + var(--safe-top)) 20px 10px;
   flex-shrink: 0;
+  width: 100%;
 }
 header img {
   width: 46px;

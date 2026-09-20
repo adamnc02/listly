@@ -9,7 +9,6 @@ import { Shopping } from './pages/Shopping'
 import { JobsPage } from './pages/JobsPage'
 import { AccountModal } from './components/AccountModal'
 import { Me } from './components/Icons'
-import { todayLong } from './lib/jobs'
 import icon from '/apple-touch-icon.png'
 
 export type Tab = 'shopping' | 'house' | 'mine'
@@ -32,12 +31,13 @@ function Shell() {
 
   return (
     <div className="app">
+      {/* Brand hard left, account hard right (Adam, 2026-09-20). The date
+          that LISTLY-DESIGN.md §5 puts under the wordmark is deliberately
+          gone: every screen already says what it is, and the due chips carry
+          the only dates that matter. */}
       <header>
         <img src={icon} alt="" />
-        <div className="grow">
-          <div className="brand">Listly</div>
-          <div className="today">{todayLong()}</div>
-        </div>
+        <div className="brand grow">Listly</div>
         <button
           className="icon-btn"
           style={{ color: 'var(--brown-2)' }}

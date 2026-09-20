@@ -67,10 +67,7 @@ export function AuthGate() {
     <div className="app">
       <header>
         <img src={icon} alt="" />
-        <div>
-          <div className="brand">Listly</div>
-          <div className="today">Shopping and jobs, shared</div>
-        </div>
+        <div className="brand grow">Listly</div>
       </header>
 
       <main>
