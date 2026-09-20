@@ -18,8 +18,8 @@ export function ManageListsSheet({ onClose }: { onClose: () => void }) {
   const [draft, setDraft] = useState('')
 
   const submit = () => {
-    addList(draft, true)
-    setDraft('')
+    if (!draft.trim()) return
+    void addList(draft, true).then(() => setDraft(''))
   }
 
   return (
@@ -82,7 +82,7 @@ export function ManageListsSheet({ onClose }: { onClose: () => void }) {
           placeholder="Add a default list"
           aria-label="Add a default list"
         />
-        <button className="btn brown" onClick={submit}>
+        <button className={`btn brown${draft.trim() ? '' : ' waiting'}`} onClick={submit}>
           Add
         </button>
       </div>

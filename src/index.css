@@ -54,6 +54,17 @@
 
 * { box-sizing: border-box; }
 
+/* 🚨 #root, not .app, is body's flex child. Without this it shrink-wraps to
+   its content, and .app's `width: 100%` then resolves against THAT rather
+   than the viewport — which is why the app rendered as a ~750px sliver on a
+   1440px display (Adam, 2026-09-20). Styling .app alone could never have
+   fixed it. */
+#root {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
 html, body {
   margin: 0;
   height: 100%;
@@ -79,7 +90,12 @@ button, .row, .listhead { -webkit-tap-highlight-color: transparent; }
 
 .app {
   width: 100%;
-  max-width: 430px;
+  /* NO max-width. Listly is phone-first, but it is a real app on a desktop
+     too, and every other app on this account (personal-f, my-dream-clean,
+     shared-finance-ledger) fills the window. A 430px column centred in a
+     27-inch display reads as broken, not as phone-first — the prototype was
+     a phone MOCKUP and that constraint belonged to the mockup, not the app
+     (Adam, 2026-09-20). */
   height: var(--app-height);
   position: relative;
   overflow: hidden;
@@ -88,6 +104,15 @@ button, .row, .listhead { -webkit-tap-highlight-color: transparent; }
   background: var(--ground);
 }
 
+/* Content stays readable when the window is wide: the shell fills, the
+   content column does not stretch to arm's length.
+   The HEADER is deliberately NOT in that column — the brand sits hard left
+   and the account button hard right, across the full width (Adam,
+   2026-09-20). */
+.stack, .sheet > * { max-width: 720px; }
+main > .stack { margin-left: auto; margin-right: auto; }
+.sheet { align-items: stretch; }
+
 /* ---------- header ---------- */
 header {
   display: flex;
@@ -95,6 +120,7 @@ header {
   gap: 12px;
   padding: calc(18px + var(--safe-top)) 20px 10px;
   flex-shrink: 0;
+  width: 100%;
 }
 header img {
   width: 46px;
@@ -292,6 +318,11 @@ main {
 }
 .btn.outline { border: 2px solid var(--brown); background: var(--paper); color: var(--brown); }
 .btn.brown { background: var(--brown); color: #fff; }
+/* An "add" button with nothing to add looks inert, so the empty field is
+   visible BEFORE the tap — but it stays clickable, so tapping it explains
+   itself rather than doing nothing. A control that is silently inert is
+   indistinguishable from a broken one (Adam, 2026-09-20). */
+.btn.waiting { opacity: .45; }
 .btn.sage { background: var(--sage); color: #fff; }
 .btn.ghost { border: 2px solid var(--line-2); background: transparent; color: var(--soft); font-weight: 400; }
 .btn.danger { background: transparent; color: var(--red); padding: 0 12px; }
@@ -380,6 +411,63 @@ nav button {
 }
 nav button[aria-current=page] { background: var(--brown); color: #fff; }
 
+/* A genuine OAuth button. It deliberately does NOT use Listly's palette:
+   Google's branding is the point — people recognise it, and a brown
+   handwritten button that says "Google" reads as a phishing attempt. This
+   matches personal-f, my-dream-clean and shared-finance-ledger, which all
+   put the real multi-colour mark on a plain surface. Only genuine OAuth
+   methods diverge from the app's design like this. */
+.btn.oauth {
+  background: #fff;
+  color: #3c4043;
+  border: 1.5px solid var(--line-2);
+  font-weight: 700;
+  width: 100%;
+  justify-content: center;
+}
+
+.sync-error {
+  /* 🚨 It must never swallow a tap. It is a fixed overlay sitting just above
+     the tab bar — exactly where the "Add list" row ends up when the page is
+     scrolled to the bottom — and an informational banner that eats clicks on
+     the control underneath it is indistinguishable from a broken button
+     (Adam, 2026-09-20: "the add list button on the home screen did
+     nothing"). */
+  pointer-events: none;
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(90px + var(--safe-bottom));
+  z-index: 400;
+  max-width: min(92vw, 680px);
+  background: var(--red);
+  color: #fff;
+  font-size: 19px;
+  line-height: 1.25;
+  padding: 10px 16px;
+  border-radius: 14px;
+  box-shadow: 0 4px 12px rgba(179, 54, 44, .28);
+}
+
+.sync-dot {
+  border: none;
+  background: transparent;
+  padding: 4px 6px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 18px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.sync-dot .dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
 /* ---------- bottom sheets ---------- */
 /* Rendered through createPortal to document.body, never from inside <main>:
    page components live in a scrolling, overflow-y:auto container, and an
@@ -396,7 +484,7 @@ nav button[aria-current=page] { background: var(--brown); color: #fff; }
 }
 .scrim {
   width: 100%;
-  max-width: 430px;
+  max-width: 720px;
   background: rgba(59, 47, 38, .4);
   display: flex; flex-direction: column; justify-content: flex-end;
 }
@@ -410,6 +498,13 @@ nav button[aria-current=page] { background: var(--brown); color: #fff; }
   max-height: 88%;
   overflow-y: auto;
 }
+/* 🚨 The sheet is a flex column with a max-height, so its children are
+   shrinkable by default — and when the content is taller than the sheet they
+   get SQUASHED rather than scrolled, which is why the "What to do" box
+   rendered as a sliver with its heading cut in half (Adam, 2026-09-20).
+   Children keep their natural height and the sheet scrolls, which is what
+   `overflow-y: auto` was always meant to do. */
+.sheet > * { flex-shrink: 0; }
 .handle { width: 44px; height: 5px; border-radius: 3px; background: var(--line-2); align-self: center; }
 .sheet h2 { margin: 0; font-size: 32px; color: var(--brown); }
 .sheet .field {

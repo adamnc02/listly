@@ -14,6 +14,7 @@ import { Chevron, Grip, Plus, StarFilled, Tick, TickSmall } from './Icons'
 export function ShoppingList({ list, onEditItem }: { list: List; onEditItem: (itemId: string) => void }) {
   const { device, setListOpen, addItem, toggleItem, reorderItems, finishShop } = useListly()
   const [draft, setDraft] = useState('')
+  const [addHint, setAddHint] = useState<string | null>(null)
 
   const open = device.openLists[list.id] ?? false
   const left = list.items.filter((i) => !i.done).length
@@ -25,9 +26,20 @@ export function ShoppingList({ list, onEditItem }: { list: List; onEditItem: (it
     (from, to) => reorderItems(list.id, from, to),
   )
 
+  // Same rule as every other "add" in the app: an empty field is stated,
+  // never silently ignored, and a failed write names itself.
   const submit = () => {
-    addItem(list.id, draft)
-    setDraft('')
+    const text = draft.trim()
+    if (!text) {
+      setAddHint('Type an item first.')
+      return
+    }
+    setAddHint(null)
+    void addItem(list.id, text)
+      .then(() => setDraft(''))
+      .catch((e: unknown) =>
+        setAddHint(`Couldn't add it: ${e instanceof Error ? e.message : String(e)}`),
+      )
   }
 
   let hint = ''
@@ -119,10 +131,20 @@ export function ShoppingList({ list, onEditItem }: { list: List; onEditItem: (it
               // written.
               enterKeyHint="done"
             />
-            <button className="icon-btn round-add" onClick={submit} aria-label="Add item">
+            <button
+              className={`icon-btn round-add${draft.trim() ? '' : ' waiting'}`}
+              onClick={submit}
+              aria-label="Add item"
+            >
               <Plus />
             </button>
           </div>
+
+          {addHint && (
+            <p className="help" style={{ color: 'var(--red)', padding: '0 8px' }} role="alert">
+              {addHint}
+            </p>
+          )}
 
           {list.items.length > 0 && (
             <div className="finish">

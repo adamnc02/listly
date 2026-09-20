@@ -48,15 +48,6 @@ export function dueLabel(iso: IsoDate): string {
   return `Due ${pretty(iso)}`
 }
 
-/** Today, long form, for the header: "Sunday 20 September". */
-export function todayLong(): string {
-  return parseLocalDate(todayIso()).toLocaleDateString('en-GB', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-  })
-}
-
 /**
  * Open jobs: dated first, soonest first; undated after them
  * (LISTLY-DESIGN.md §3). `sort` is given a copy — sorting the array in
