@@ -3,6 +3,7 @@ import { Sheet } from './Sheet'
 import { supabase } from '../lib/supabaseClient'
 import { powerSyncDb, LISTLY_STREAM, LISTLY_REF_STREAM } from '../lib/powersync/database'
 import { readBootLog } from '../lib/powersync/bootLog'
+import { describeSyncError } from '../lib/powersync/describeSyncError'
 
 /**
  * "Why isn't it syncing?", answered in plain English inside the app.
@@ -150,7 +151,11 @@ export function SyncDiagnostics({ onClose }: { onClose: () => void }) {
         state: st?.connected ? 'ok' : 'fail',
         detail: st?.connected
           ? `Connected. Last synced ${st.lastSyncedAt?.toLocaleTimeString('en-GB') ?? 'not yet'}.`
-          : `Not connected. ${st?.downloadError?.message ?? st?.uploadError?.message ?? 'No error reported.'}`,
+          : `Not connected. ${
+              st?.downloadError || st?.uploadError
+                ? describeSyncError(st.downloadError ?? st.uploadError)
+                : 'No error reported.'
+            }`,
       })
 
       push({

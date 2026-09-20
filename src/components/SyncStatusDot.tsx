@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { SyncDiagnostics } from './SyncDiagnostics'
+import { describeSyncError } from '../lib/powersync/describeSyncError'
 import { powerSyncDb } from '../lib/powersync/database'
 
 /**
@@ -63,7 +64,7 @@ export function SyncStatusDot() {
   }
 
   const title = [
-    err ? `Sync error: ${err.message}` : null,
+    err ? `Sync error: ${describeSyncError(err)}` : null,
     status?.lastSyncedAt
       ? `Last synced ${status.lastSyncedAt.toLocaleTimeString('en-GB')}`
       : 'Not synced yet',

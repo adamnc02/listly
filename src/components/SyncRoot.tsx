@@ -4,6 +4,7 @@ import { powerSyncDb, powerSyncConnector, LISTLY_STREAM, LISTLY_REF_STREAM } fro
 import { getHouseholdId, refreshHouseholdId } from '../lib/powersync/household'
 import { assertListlySchemaReachable } from '../lib/supabaseClient'
 import { recordBootStep, clearBootLog } from '../lib/powersync/bootLog'
+import { describeSyncError } from '../lib/powersync/describeSyncError'
 
 /**
  * Boots sync, and holds the household guard.
@@ -149,7 +150,7 @@ export function SyncRoot({ children }: { children: ReactNode }) {
         if (cancelled) return
         const msg = e instanceof Error ? e.message : String(e)
         recordBootStep('blocking startup', 'fail', msg)
-        setStatus({ kind: 'error', message: msg })
+        setStatus({ kind: 'error', message: describeSyncError(e) })
         return
       }
 
@@ -192,7 +193,7 @@ export function SyncRoot({ children }: { children: ReactNode }) {
         const msg = e instanceof Error ? e.message : String(e)
         recordBootStep('connect / subscribe', 'fail', msg)
         console.error('[powersync] could not connect or subscribe:', e)
-        setSyncError(msg)
+        setSyncError(describeSyncError(e))
         return
       }
 
@@ -223,7 +224,7 @@ export function SyncRoot({ children }: { children: ReactNode }) {
         const msg = e instanceof Error ? e.message : String(e)
         recordBootStep('household guard', 'fail', msg)
         console.error('[powersync] household guard failed to start:', e)
-        setSyncError(msg)
+        setSyncError(describeSyncError(e))
       }
     }
 
