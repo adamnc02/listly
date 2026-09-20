@@ -68,9 +68,29 @@
           document.documentElement.style.setProperty('--safe-top', measureEnv('safe-area-inset-top') + 'px')
         }
 
+        // 🚨 The floating nav's bottom, set from the DOM PROBE rather than
+        // from the CSS env() value. Ported from BLOC's positionNavDirect()
+        // for the same reason the probe exists at all: the CSS value can be
+        // stale on iOS standalone, and the nav is the one element where a
+        // stale inset is immediately visible — it either collides with the
+        // home indicator or floats away from it. -6px deliberately tucks the
+        // pill into that strip, exactly as BLOC does.
+        //
+        // The CSS rule already says `bottom: calc(var(--safe-bottom) - 6px)`,
+        // so this is belt and braces: it wins when they disagree, and it is
+        // harmless when they do not.
+        function positionNavDirect() {
+          var nav = document.querySelector('.app > nav')
+          if (!nav) return
+          // Same floor as the CSS rule: the -6px tuck only makes sense when
+          // there is a home-indicator strip to tuck into.
+          nav.style.bottom = Math.max(measureEnv('safe-area-inset-bottom') - 6, 8) + 'px'
+        }
+
         function measureAll() {
           setAppHeight()
           setSafeAreaVars()
+          positionNavDirect()
         }
 
         document.addEventListener('DOMContentLoaded', function () {
@@ -94,8 +114,8 @@
         }
       })()
     </script>
-    <script type="module" crossorigin src="/listly/assets/index-DB_Lcwpt.js"></script>
-    <link rel="stylesheet" crossorigin href="/listly/assets/index-D23TU5X8.css">
+    <script type="module" crossorigin src="/listly/assets/index-DaoqEOoh.js"></script>
+    <link rel="stylesheet" crossorigin href="/listly/assets/index-DaYKQHkO.css">
   </head>
   <body>
     <div id="root"></div>
