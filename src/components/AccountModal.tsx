@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Sheet } from './Sheet'
 import { useAuth } from '../context/AuthContext'
 import { getLinkCode, regenerateLinkCode, redeemLinkCode, eraseMyData } from '../lib/powersync/linking'
@@ -35,8 +35,17 @@ export function AccountModal({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState<string | null>(null)
   const [confirm, setConfirm] = useState<'regenerate' | 'redeem' | 'erase' | null>(null)
 
+  // Guarded against React StrictMode's double-invoke: two concurrent calls
+  // to create_household_link_code() race each other on its unique constraint.
+  // linking.ts also retries the loser, so this is belt and braces — but not
+  // making the second call at all is better than recovering from it.
+  const asked = useRef(false)
   useEffect(() => {
-    getLinkCode().then(setCode, (e) => setError(e.message))
+    if (asked.current) return
+    asked.current = true
+    getLinkCode().then(setCode, (e: unknown) =>
+      setError(e instanceof Error ? e.message : String(e)),
+    )
   }, [])
 
   const run = async (label: string, fn: () => Promise<void>) => {

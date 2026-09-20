@@ -12,10 +12,43 @@ import { sfl } from '../supabaseClient'
  * second linking model.
  */
 
+/**
+ * The household's permanent code. Idempotent by design — it returns the
+ * existing code and only mints one if there isn't one.
+ *
+ * 🚨 But it is idempotent, not concurrency-safe. The function does a
+ * check-then-insert against a `unique (household_id)` constraint:
+ *
+ *     select code ... if found, return it;
+ *     insert into household_link_codes ...
+ *
+ * Two calls that arrive together both find nothing and both insert, and the
+ * loser gets `23505 duplicate key value violates unique constraint
+ * "household_link_codes_household_id_uniq"`. React StrictMode double-invokes
+ * effects in development, so opening the Account modal reproduced it every
+ * time (Adam, UAT 2026-09-20) — and two devices opening it at once would do
+ * the same in production.
+ *
+ * The loser's retry is trivially correct: by the time it runs, the winner's
+ * row exists, so the re-read returns it. One retry is enough — there is no
+ * path where it can race twice, because after the first insert the row is
+ * permanent.
+ *
+ * The real fix belongs in the ledger's own function (`on conflict
+ * (household_id) do nothing`, then re-select). That is a migration against a
+ * live shared function and is not Listly's to make unilaterally; noted in
+ * PROMPT-03.
+ */
 export async function getLinkCode(): Promise<string> {
   const { data, error } = await sfl().rpc('create_household_link_code')
-  if (error) throw error
-  return data as string
+  if (!error) return data as string
+
+  if (error.code === '23505') {
+    const retry = await sfl().rpc('create_household_link_code')
+    if (retry.error) throw retry.error
+    return retry.data as string
+  }
+  throw error
 }
 
 export async function regenerateLinkCode(): Promise<string> {
