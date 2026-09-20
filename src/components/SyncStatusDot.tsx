@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { SyncDiagnostics } from './SyncDiagnostics'
 import { powerSyncDb } from '../lib/powersync/database'
 
 /**
@@ -25,6 +26,7 @@ import { powerSyncDb } from '../lib/powersync/database'
  */
 export function SyncStatusDot() {
   const [status, setStatus] = useState(() => powerSyncDb.currentStatus)
+  const [open, setOpen] = useState(false)
 
   useEffect(() => {
     const off = powerSyncDb.registerListener({
@@ -76,10 +78,20 @@ export function SyncStatusDot() {
     if (err) console.error('[listly] sync status error:', err)
   }, [err])
 
+  // Tapping it runs the checks. Nobody should have to read a console to
+  // find out why their shopping list is not syncing.
   return (
-    <span className="sync-dot" title={title}>
-      <span className="dot" style={{ background: colour }} />
-      {label && <span className="lbl-sm">{label}</span>}
-    </span>
+    <>
+      <button
+        className="sync-dot"
+        title={title}
+        onClick={() => setOpen(true)}
+        aria-label={label ? `Sync: ${label}. Tap to check.` : 'Sync is working. Tap to check.'}
+      >
+        <span className="dot" style={{ background: colour }} />
+        {label && <span>{label}</span>}
+      </button>
+      {open && <SyncDiagnostics onClose={() => setOpen(false)} />}
+    </>
   )
 }

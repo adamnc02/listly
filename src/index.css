@@ -438,6 +438,10 @@ nav button[aria-current=page] { background: var(--brown); color: #fff; }
 }
 
 .sync-dot {
+  border: none;
+  background: transparent;
+  padding: 4px 6px;
+  min-height: 44px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
