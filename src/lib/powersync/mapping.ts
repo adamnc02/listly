@@ -22,7 +22,16 @@ import type { IsoDate, Item, Job, JobPage, List } from '../../types'
 export type Row = Record<string, unknown>
 
 const str = (v: unknown, fallback = ''): string => (typeof v === 'string' ? v : fallback)
-const bool = (v: unknown): boolean => v === 1 || v === true
+/**
+ * SQLite holds booleans as 0/1 integers — but a value can arrive as a string
+ * depending on how it crossed the worker boundary, and `'1' === 1` is false.
+ * A boolean silently read as `false` is not a crash, it is a row quietly
+ * vanishing from the UI: `never_had_items` reading false hides a
+ * just-created list, and `is_default` reading false hides an empty one.
+ * So accept every honest representation rather than assume one.
+ */
+const bool = (v: unknown): boolean =>
+  v === 1 || v === true || v === '1' || v === 'true' || v === 't'
 const num = (v: unknown): number | null =>
   v === null || v === undefined || v === '' ? null : Number(v)
 
