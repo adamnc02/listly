@@ -52,11 +52,18 @@ function Shell() {
 
       <DueSoonBanners />
 
-      <main>
-        {tab === 'shopping' && <Shopping />}
-        {tab === 'house' && <JobsPage page="house" />}
-        {tab === 'mine' && <JobsPage page="mine" />}
-      </main>
+      {/* The fades are siblings of <main> inside its own wrapper, not
+          children of .app: anchored to .app, a top fade would sit over the
+          header — which does not scroll — and fade the wrong thing. */}
+      <div className="main-wrap">
+        <main>
+          {tab === 'shopping' && <Shopping />}
+          {tab === 'house' && <JobsPage page="house" />}
+          {tab === 'mine' && <JobsPage page="mine" />}
+        </main>
+        <div className="edge-fade edge-fade-top" aria-hidden="true" />
+        <div className="edge-fade edge-fade-bottom" aria-hidden="true" />
+      </div>
 
       <BottomNav tab={tab} onChange={setTab} />
 

@@ -33,6 +33,14 @@
   --line: #E6DCCD;
   --line-2: #D9CBB8;
   --red: #B3362C;
+  /* 🚨 An RGB triplet, because the edge fades must write their transparent
+     end as rgba(<bg>, 0) and NEVER the `transparent` keyword: some browsers
+     interpolate `transparent` through transparent-BLACK, and the gradient
+     visibly darkens in the middle. Keep this in step with --ground. */
+  --ground-rgb: 245, 239, 230;
+  /* The floating nav's own height, so <main> can reserve room for it once it
+     leaves the flow. */
+  --nav-h: 78px;
 
   --chip-bg: #F1E6D7;
   --chip-soon-bg: #FBE6E3;
@@ -126,7 +134,16 @@ button, .row, .listhead { -webkit-tap-highlight-color: transparent; }
      that arithmetic work. */
   padding-top: var(--safe-top);
   position: relative;
-  overflow: hidden;
+  /* 🚨 `visible`, not `hidden`, and it was `hidden` until Phase 4. The nav is
+     now `position: absolute` at `bottom: calc(var(--safe-bottom) - 6px)`, and
+     that -6px deliberately tucks the pill into the home-indicator strip — so
+     on any device where --safe-bottom is 0 (a desktop window, an older
+     iPhone) 6px of it sits BELOW .app's box and `hidden` would shear it off.
+     Checked rather than assumed, as PROMPT-03 §2.7 asks: nothing else here
+     relies on the clip. html and body are both `overflow: hidden` already and
+     remain the real backstop, and <main> does its own scrolling. BLOC's #app
+     likewise has no overflow at all. */
+  overflow: visible;
   display: flex;
   flex-direction: column;
   background: var(--ground);
@@ -189,12 +206,56 @@ header img {
   padding: 0;
   background: transparent;
 }
+/* The scroll area and its two fades, so the gradients anchor to the SCROLLING
+   box rather than to .app — a top fade anchored to .app would just fade out
+   the header, which does not scroll. */
+.main-wrap {
+  position: relative;
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
 main {
   flex: 1 1 0;
   min-height: 0;
   overflow-y: auto;
-  padding: 8px 16px 24px;
+  /* The nav is out of the flow now, so the scroll area has to reserve its
+     room itself or the last row sits permanently under the pill. */
+  padding: 8px 16px calc(var(--nav-h) + var(--safe-bottom) + 16px);
   -webkit-overflow-scrolling: touch;
+}
+
+/* ---------- edge fades ----------
+   Ported from BLOC (.edge-fade). Scrolling content dissolves into the
+   background at the top and bottom instead of being hard-clipped at the
+   boundary — and at the bottom, into the strip the floating nav sits over.
+
+   🚨 The transparent end is rgba(var(--ground-rgb), 0), NEVER the
+   `transparent` keyword: some browsers interpolate `transparent` through
+   transparent-black and the gradient visibly darkens in the middle.
+
+   z-index 50: above content (0–2), below the nav (100). pointer-events: none
+   so they can never swallow a tap — the same rule .sync-error had to learn
+   the hard way. */
+.edge-fade {
+  position: absolute;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+  z-index: 50;
+}
+.edge-fade-top {
+  top: 0;
+  height: 20px;
+  background: linear-gradient(to bottom, rgba(var(--ground-rgb), 1) 0%, rgba(var(--ground-rgb), 0) 100%);
+}
+.edge-fade-bottom {
+  bottom: 0;
+  /* Tall enough to cover the whole strip the pill floats over, so content
+     fades out behind and around it rather than sliding under a hard edge. */
+  height: calc(var(--nav-h) + var(--safe-bottom) + 12px);
+  background: linear-gradient(to top, rgba(var(--ground-rgb), 1) 55%, rgba(var(--ground-rgb), 0) 100%);
 }
 .stack { display: flex; flex-direction: column; gap: 14px; }
 .pagehead {
@@ -416,24 +477,57 @@ input[type=date] {
 .donetext { font-size: 24px; color: var(--done-job); text-decoration: line-through; padding-left: 4px; }
 .done-card .row { background: transparent; }
 
-/* ---------- tab bar ---------- */
+/* ---------- tab bar: a FLOATING PILL ----------
+   Ported from BLOC's #nav (PROMPT-03 §2.7, Adam on device 2026-09-20). The
+   full-bleed bar it replaces collided with the phone's own rounded screen
+   corners, so it could not render its own height safely. Inset 12px each
+   side, a pill clears them entirely.
+
+   Only the POSITIONING and the SHAPE are borrowed. Listly keeps its own
+   palette and its three icon-above-label tabs; BLOC's dark pill and its
+   morphing #nav-pill highlight are not ported.
+
+   🚨 `absolute`, anchored to .app — NOT `fixed`. BLOC's own comment, and it
+   is the whole reason this works: `fixed` on iOS standalone relies on
+   WebKit's internal sense of the viewport, which is stale on first paint
+   until a real scroll forces a recompute — and Listly now LOCKS page
+   scrolling, so that scroll never comes. Anchoring to .app means the nav
+   follows normal layout against a box driven by --app-height, the same
+   JS-measured value everything else uses.
+
+   z-index 100, which is the contract: content 0–2 · fades 50 · nav 100 ·
+   modals 200+. Listly's .sheet-root is 500 and .sync-error 400, both
+   comfortably above — verified by screenshot, not assumed (§2.7). */
 nav {
-  /* flex-shrink: 0 so a long list can never squeeze the tab bar, and
-     position: relative + z-index so it always paints above scrolled content
-     rather than being overlapped at the seam. */
-  flex-shrink: 0;
-  position: relative;
-  z-index: 10;
+  position: absolute;
+  left: 50%;
+  /* 🚨 The -6px deliberately tucks the pill into the home-indicator strip,
+     which is right on a phone — but on a desktop window, or an iPhone in a
+     Safari tab, --safe-bottom is 0 and that tuck shears 6px off the bottom
+     of the pill against the window edge. Seen in the first screenshot pass,
+     not reasoned about. The floor keeps the tuck where there is something to
+     tuck into (iPhone standalone: max(28px, 8px) = 28px, unchanged) and
+     lifts the pill clear where there is not. */
+  bottom: max(calc(var(--safe-bottom) - 6px), 8px);
+  transform: translateX(-50%);
+  width: calc(100% - 24px);
+  /* The content column caps at 720px, so the nav does too — otherwise on a
+     1440px window it stretches into a very wide pill that has nothing to do
+     with the content under it. Decided deliberately (§2.7). */
+  max-width: min(calc(100% - 24px), 720px);
+  z-index: 100;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  padding: 8px 12px calc(14px + var(--safe-bottom));
+  gap: 4px;
+  padding: 5px;
+  border-radius: 999px;
   background: var(--paper);
-  border-top: 1.5px solid var(--line);
+  border: 1.5px solid var(--line);
+  box-shadow: 0 6px 20px rgba(59, 47, 38, .16);
 }
 nav button {
   height: 62px;
-  border-radius: 16px;
+  border-radius: 999px;
   border: none;
   background: transparent;
   color: var(--brown-2);
@@ -444,6 +538,8 @@ nav button {
   gap: 3px;
 }
 nav button[aria-current=page] { background: var(--brown); color: #fff; }
+/* The pill already floats above the home indicator, so the error banner
+   clears the pill rather than the old full-bleed bar's height. */
 
 /* A genuine OAuth button. It deliberately does NOT use Listly's palette:
    Google's branding is the point — people recognise it, and a brown
@@ -471,7 +567,7 @@ nav button[aria-current=page] { background: var(--brown); color: #fff; }
   position: fixed;
   left: 50%;
   transform: translateX(-50%);
-  bottom: calc(90px + var(--safe-bottom));
+  bottom: calc(var(--nav-h) + var(--safe-bottom) + 10px);
   z-index: 400;
   max-width: min(92vw, 680px);
   background: var(--red);
@@ -592,3 +688,54 @@ nav button[aria-current=page] { background: var(--brown); color: #fff; }
 @media (prefers-reduced-motion: reduce) {
   .chev { transition: none; }
 }
+
+/* ---------- the ledger bridge (Phase 4) ---------- */
+
+/* 🚨 "Couldn't add to the ledger — tap to retry." The trigger can never
+   raise (that would block the device's whole upload queue), so ledger_error
+   on the completion row is the ONLY signal a shop did not reach the ledger.
+   This is where it surfaces, at the top of the Shopping page, because the
+   alternative is a household budget that quietly does not add up. */
+.ledger-errors { display: flex; flex-direction: column; gap: 8px; }
+.ledger-error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 12px 12px 16px;
+  border-radius: 16px;
+  background: var(--chip-soon-bg);
+  border: 1.5px solid var(--red);
+  color: var(--chip-soon-ink);
+}
+.ledger-error .t { font-size: 24px; font-weight: 700; line-height: 1.1; }
+.ledger-error .w { font-size: 18px; line-height: 1.2; opacity: .9; overflow-wrap: anywhere; }
+.btn.retry {
+  background: var(--red);
+  color: #fff;
+  flex-shrink: 0;
+  padding: 0 18px;
+}
+
+/* The list's ledger category, in Manage lists. Behind the D4 gate: with no
+   `people` row this does not render at all, greyed out or otherwise. */
+.cat-chip {
+  margin-top: 2px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 16px;
+  border: 1.5px solid var(--line-2);
+  background: var(--chip-bg);
+  color: var(--soft);
+  font-size: 19px;
+  line-height: 1;
+}
+.cat-chip.unset { border-style: dashed; background: transparent; color: var(--muted); }
+.mrow { flex-wrap: wrap; }
+.cat-picker { width: 100%; padding: 4px 0 10px; }
+.cat-picker button { height: 38px; font-size: 20px; padding: 0 13px; }
+
+/* Finish shop, step 1. The £ sits outside the field so it never has to be
+   typed, deleted or parsed. */
+.amountrow { display: flex; align-items: center; gap: 10px; }
+.amountrow .cur { font-size: 40px; font-weight: 700; color: var(--brown); line-height: 1; }
+.sheet .field.amount { height: 62px; font-size: 40px; font-weight: 700; }

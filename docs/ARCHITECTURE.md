@@ -1,7 +1,7 @@
 # Listly — architecture
 
-How the app is put together, and why. **State: Phases 1–3 complete (2026-09-20).** The ledger bridge
-(Phase 4) and reminders (Phase 5) are not built.
+How the app is put together, and why. **State: Phases 1–4 complete (2026-09-20).** The ledger bridge
+is live; reminders (Phase 5) are not built.
 
 ---
 
@@ -47,11 +47,18 @@ the output.
 | Prefix | What | Written? |
 |---|---|---|
 | `lst_` | Listly's own tables, in the `listly` schema | yes |
-| `lst_ref_` | A read-only mirror of six small `shared_finance_ledger` tables | **never** |
+| `lst_ref_` | A read-only mirror of **five** small `shared_finance_ledger` tables | **never** |
 
 The mirror exists so the D4 gate and every picker work standing in a shop with no signal. It is
 deliberately **not** the ledger's own 27-table stream: Listly has no business holding loans and
 salary history. The connector refuses to upload a `lst_ref_` table and says so loudly.
+
+`people`, `categories`, `pots`, `joint_account` and `household_members`. **`savings_pots` was
+dropped on 2026-09-20** (Adam): the location picker excludes savings pots by design, matching the
+ledger's own ad-hoc entry, so it was dead data. That was a change to what Listly *subscribes to* —
+`shared_finance_ledger.savings_pots` is untouched. Removing it needed a dashboard redeploy of the
+`listly_ledger_ref` stream, which is the general rule: **adding or removing a mirror TABLE needs a
+stream redeploy; adding a mirror COLUMN does not**, because every query is `SELECT *`.
 
 Four apps share the origin `adamnc02.github.io` and one login. personal-f's stream is
 auto-subscribed and outputs **bare** names; the ledger's outputs `sfl_`. Audited 2026-09-20: **45
@@ -163,3 +170,60 @@ components render inside an `overflow-y: auto` container and a bare `fixed`/`abs
 clipped by it; neither a z-index bump nor switching to `absolute` helps (§15, three attempts on
 personal-f). Sheet children are `flex-shrink: 0` — without it, taller-than-sheet content is squashed
 instead of scrolled.
+
+---
+
+## The ledger bridge
+
+One row, one way, and it is worth understanding before touching either side.
+
+Finishing a shop clears the ticked items and collapses the list — the same thing it has always
+done. Then, **only if the D4 gate is open**, a stepped sheet asks three things (amount, date,
+location) and writes one row to `listly.shop_completions`. A trigger on that table, inside the
+database, writes the `shared_finance_ledger.transactions` row.
+
+**Why server-side rather than a second client write:** it works offline, it cannot produce a
+malformed ledger row from a client, and it needs no second round trip. The app writes to its own
+schema and the database does the rest.
+
+**The gate is `select 1 from lst_ref_people limit 1`** — read from the local mirror, so it costs no
+request and works with no signal, and re-evaluated on every sync delivery, so the price step appears
+the moment a `people` row does. It is deliberately **not** a category count:
+`ensure_household()` seeds 35 categories into every household, so a count is never zero.
+
+**The failure signal is a column, not an exception.** The trigger can never `raise` — that would
+block the device's whole upload queue — so `shop_completions.ledger_error` is the only way to know a
+shop did not reach the ledger. It syncs down and the Shopping page renders it with a Retry.
+
+Full detail, including the exact field mapping and the blast-radius table, is in
+[`LEDGER-INTEGRATION.md`](LEDGER-INTEGRATION.md). It is the page a *ledger* developer reads.
+
+---
+
+## The app shell, and why the nav floats
+
+`html`, `body` and `.app` are all sized from one JS-measured `--app-height`, and the page itself
+does not scroll — only `<main>` does. Ported from BLOC, which paid for it on real hardware.
+
+🚨 **The non-obvious part:** `position: fixed` on iOS standalone relies on WebKit's *own* internal
+sense of the viewport, which is stale on first paint until a real scroll forces a recompute. Locking
+the page removes the scroll that used to accidentally hide that. So the bottom nav is
+`position: absolute`, anchored to `.app` — it follows normal layout against a box driven by the same
+measured value as everything else.
+
+It is also a **pill inset 12px each side**, not a full-bleed bar, because a full-bleed bar's bottom
+corners collide with the device's own rounded screen corners and it cannot render its own height
+safely.
+
+The z-index contract, which any new overlay must respect:
+
+| Layer | z-index |
+|---|---|
+| scrolling content | 0–2 |
+| edge fades | 50 |
+| floating nav | **100** |
+| modal overlays (`.sheet-root`) | **500** |
+| the sync-error banner | 400 |
+
+Every overlay goes through `Sheet`, which portals to `document.body`. Verified by screenshot on
+2026-09-20 rather than reasoned about — see `APP-KNOWLEDGE.md`.

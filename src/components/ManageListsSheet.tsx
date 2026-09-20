@@ -8,14 +8,20 @@ import { Star, StarFilled, Trash } from './Icons'
  * included — that is the whole point of the sheet: a list that hides itself
  * when empty still exists, and this is where you find it.
  *
- * Phase 4 adds a category chip to each row here, gated on the household
- * having at least one `people` row (PROMPT-01 §8.2d / D4). Nothing about
- * that is stubbed in now: with no ledger the chip must not appear at all,
- * and the cleanest way to guarantee that today is for it not to exist.
+ * Phase 4 adds the category chip (PROMPT-01 §8.2d). The category is a
+ * property of the LIST, not of a shop, so it is set here and not at the till.
+ *
+ * 🚨 The chip is behind the D4 gate. With no `people` row in the household
+ * there is no ledger, a category means nothing, and the chip must not appear
+ * AT ALL — not greyed out, not empty. Nothing on this screen should mention
+ * a ledger that does not exist.
  */
 export function ManageListsSheet({ onClose }: { onClose: () => void }) {
-  const { lists, toggleDefault, deleteList, addList } = useListly()
+  const { lists, toggleDefault, deleteList, addList, ledgerGateOpen, categories, setListCategory } =
+    useListly()
   const [draft, setDraft] = useState('')
+  const [picking, setPicking] = useState<string | null>(null)
+  const categoryName = (id: string) => categories.find((c) => c.id === id)?.name ?? ''
 
   const submit = () => {
     if (!draft.trim()) return
@@ -50,6 +56,16 @@ export function ManageListsSheet({ onClose }: { onClose: () => void }) {
               <div className="grow">
                 <div className="nm">{l.name}</div>
                 <div className="st">{status}</div>
+                {ledgerGateOpen && (
+                  <button
+                    className={`cat-chip${l.categoryId ? '' : ' unset'}`}
+                    onClick={() => setPicking(picking === l.id ? null : l.id)}
+                    aria-expanded={picking === l.id}
+                    aria-label={`Ledger category for ${l.name}`}
+                  >
+                    {l.categoryId ? categoryName(l.categoryId) || 'Category' : 'Set a category'}
+                  </button>
+                )}
               </div>
               <button
                 className="icon-btn del"
@@ -67,6 +83,24 @@ export function ManageListsSheet({ onClose }: { onClose: () => void }) {
               >
                 <Trash />
               </button>
+              {ledgerGateOpen && picking === l.id && (
+                <div className="chips cat-picker">
+                  {categories.map((c) => (
+                    <button
+                      key={c.id}
+                      aria-pressed={l.categoryId === c.id}
+                      onClick={() => {
+                        // 🚨 Stored exactly as read, '@<household_id>'
+                        // suffix intact (§31).
+                        setListCategory(l.id, c.id)
+                        setPicking(null)
+                      }}
+                    >
+                      {c.name}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )
         })}

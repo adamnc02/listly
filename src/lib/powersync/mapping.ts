@@ -46,6 +46,8 @@ export function rowToList(row: Row, items: Item[]): List {
     name: str(row.name),
     isDefault: bool(row.is_default),
     neverHadItems: bool(row.never_had_items),
+    // '' when unset. Passed through verbatim, suffix intact (§31).
+    categoryId: fromDbId(row.category_id),
     createdAt: fromDbId(row.created_at).slice(0, 10) as IsoDate,
     items,
   }

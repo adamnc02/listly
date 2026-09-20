@@ -1,6 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import type { DeviceState, IsoDate, Job, JobPage, List } from '../types'
+import type {
+  DeviceState, IsoDate, Job, JobPage, LedgerCategory, List, ShopCompletionDraft,
+} from '../types'
 import {
   clearDismissal,
   loadDeviceState,
@@ -11,6 +13,12 @@ import {
   withListOpen,
 } from '../lib/deviceState'
 import { useHouseholdId } from '../components/SyncRoot'
+import { useAuth } from './AuthContext'
+import {
+  useFailedCompletions, useLedgerCategories, useLedgerGate, useLocationOptions,
+  type FailedCompletion,
+} from '../lib/powersync/ledger'
+import type { LocationOption } from '../types'
 import { useWatchedQuery } from '../lib/powersync/useWatchedQuery'
 import { byPosition, rowToItem, rowToJob, rowToList } from '../lib/powersync/mapping'
 import * as writes from '../lib/powersync/writes'
@@ -31,6 +39,18 @@ import * as writes from '../lib/powersync/writes'
  * column.
  */
 
+/**
+ * What Finish shop hands to the price sheet. Captured BEFORE the ticked items
+ * are deleted, because `itemsSnapshot` is exactly those rows.
+ */
+export interface ShopSnapshot {
+  listId: string
+  listName: string
+  itemsSnapshot: string
+  /** '' → the sheet inserts a category step at the front, once. */
+  categoryId: string
+}
+
 interface ListlyValue {
   lists: List[]
   jobs: Job[]
@@ -46,7 +66,27 @@ interface ListlyValue {
   saveItem: (listId: string, itemId: string, text: string, moveToListId: string, newListName: string) => void
   deleteItem: (listId: string, itemId: string) => void
   reorderItems: (listId: string, fromIndex: number, toIndex: number) => void
-  finishShop: (listId: string) => void
+  /**
+   * Clears the ticked items and collapses the list — exactly what it did
+   * before Phase 4 — and returns a snapshot of what was ticked so the caller
+   * can open the price sheet. The snapshot is taken FIRST, because the rows
+   * it describes are about to be deleted.
+   */
+  finishShop: (listId: string) => Promise<ShopSnapshot>
+
+  // ── the ledger bridge (Phase 4) ──────────────────────────────────────────
+  /**
+   * 🚨 D4. True when the household has at least one `people` row. Everything
+   * ledger-shaped in the UI is behind this, and with no ledger NONE of it
+   * renders — no price sheet, no category chip, no mention of the ledger.
+   */
+  ledgerGateOpen: boolean
+  categories: LedgerCategory[]
+  locationOptions: LocationOption[]
+  setListCategory: (listId: string, categoryId: string) => void
+  saveShopCompletion: (draft: ShopCompletionDraft) => Promise<void>
+  failedCompletions: FailedCompletion[]
+  retryLedger: (completionId: string) => void
 
   jobsFor: (page: JobPage) => Job[]
   addJob: (page: JobPage, text: string, due: IsoDate) => Promise<void>
@@ -68,6 +108,16 @@ const run = (p: Promise<unknown>) => {
 
 export function ListlyProvider({ children }: { children: ReactNode }) {
   const householdId = useHouseholdId()
+  const { session } = useAuth()
+  const userId = session?.user?.id ?? null
+
+  // All four read the local lst_ref_ mirror, so they work with no signal and
+  // re-evaluate on every sync delivery — the moment a `people` row appears in
+  // the ledger, the price step appears in Listly. No reload, no setting.
+  const ledgerGateOpen = useLedgerGate()
+  const categories = useLedgerCategories()
+  const locationOptions = useLocationOptions(userId)
+  const failedCompletions = useFailedCompletions()
 
   const listRows = useWatchedQuery('SELECT * FROM lst_shopping_lists')
   const itemRows = useWatchedQuery('SELECT * FROM lst_shopping_items')
@@ -209,12 +259,44 @@ export function ListlyProvider({ children }: { children: ReactNode }) {
     [lists],
   )
 
-  const finishShop = useCallback((listId: string) => {
-    // Phase 4 adds the ledger step AFTER this: it does exactly this first,
-    // then opens the price sheet only if the D4 gate is open.
-    run(writes.clearDoneItems(listId))
-    setDevice((d) => withListOpen(d, listId, false))
+  const finishShop = useCallback(
+    async (listId: string): Promise<ShopSnapshot> => {
+      const list = lists.find((l) => l.id === listId)
+      // 🚨 Read the ticked names BEFORE deleting them. This is the whole
+      // reason finishShop is async now.
+      const ticked = await writes.tickedItemNames(listId)
+      await writes.clearDoneItems(listId)
+      setDevice((d) => withListOpen(d, listId, false))
+      return {
+        listId,
+        listName: list?.name ?? '',
+        itemsSnapshot: ticked.join('\n'),
+        categoryId: list?.categoryId ?? '',
+      }
+    },
+    [lists],
+  )
+
+  const setListCategory = useCallback((listId: string, categoryId: string) => {
+    run(writes.setListCategory(listId, categoryId))
   }, [])
+
+  const saveShopCompletion = useCallback(
+    async (draft: ShopCompletionDraft) => {
+      // A list with no category is asked once, and the answer is saved back
+      // onto the list so the normal case stays three steps (§8.2d).
+      const list = lists.find((l) => l.id === draft.listId)
+      if (list && draft.categoryId && list.categoryId !== draft.categoryId) {
+        await writes.setListCategory(draft.listId, draft.categoryId)
+      }
+      // Deliberately not wrapped in run(): the sheet awaits this so it can
+      // show the user why it failed rather than closing on a lie.
+      await writes.insertShopCompletion(householdId, draft)
+    },
+    [householdId, lists],
+  )
+
+  const retryLedger = useCallback((id: string) => run(writes.retryLedgerWrite(id)), [])
 
   const jobsFor = useCallback((page: JobPage) => jobs.filter((j) => j.page === page), [jobs])
 
@@ -279,6 +361,8 @@ export function ListlyProvider({ children }: { children: ReactNode }) {
       addItem, toggleItem, saveItem, deleteItem, reorderItems, finishShop,
       jobsFor, addJob, toggleJob, toggleRemind, saveJob, deleteJob, setDoneOpen,
       dismissBanner,
+      ledgerGateOpen, categories, locationOptions, setListCategory,
+      saveShopCompletion, failedCompletions, retryLedger,
     }),
     [
       lists, jobs, device, visibleLists,
@@ -286,6 +370,8 @@ export function ListlyProvider({ children }: { children: ReactNode }) {
       addItem, toggleItem, saveItem, deleteItem, reorderItems, finishShop,
       jobsFor, addJob, toggleJob, toggleRemind, saveJob, deleteJob, setDoneOpen,
       dismissBanner,
+      ledgerGateOpen, categories, locationOptions, setListCategory,
+      saveShopCompletion, failedCompletions, retryLedger,
     ],
   )
 
