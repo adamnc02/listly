@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext'
 import { powerSyncDb, powerSyncConnector, LISTLY_STREAM, LISTLY_REF_STREAM } from '../lib/powersync/database'
 import { getHouseholdId, refreshHouseholdId } from '../lib/powersync/household'
 import { assertListlySchemaReachable } from '../lib/supabaseClient'
+import { recordBootStep, clearBootLog } from '../lib/powersync/bootLog'
 
 /**
  * Boots sync, and holds the household guard.
@@ -121,11 +122,14 @@ export function SyncRoot({ children }: { children: ReactNode }) {
       ])
 
     const boot = async () => {
+      clearBootLog()
+      recordBootStep('boot started', true, `user ${userId.slice(0, 8)}…`)
       let hh: string
       try {
         // 1. The household, from the ledger's own function.
         hh = await withTimeout(getHouseholdId(userId), 20000, 'Setting up your household')
-        if (cancelled) return
+        if (cancelled) { recordBootStep('cancelled after ensure_household', false); return }
+        recordBootStep('ensure_household', true, `household ${hh.slice(0, 8)}…`)
         setHouseholdId(hh)
 
         // 2. The §20 smoke test, before anything depends on REST working.
@@ -134,14 +138,18 @@ export function SyncRoot({ children }: { children: ReactNode }) {
           20000,
           'Checking the Listly schema',
         )
-        if (cancelled) return
+        if (cancelled) { recordBootStep('cancelled after schema check', false); return }
         if (reachErr) {
+          recordBootStep('listly schema reachable', false, reachErr)
           setStatus({ kind: 'error', message: reachErr })
           return
         }
+        recordBootStep('listly schema reachable', true)
       } catch (e) {
         if (cancelled) return
-        setStatus({ kind: 'error', message: e instanceof Error ? e.message : String(e) })
+        const msg = e instanceof Error ? e.message : String(e)
+        recordBootStep('blocking startup', false, msg)
+        setStatus({ kind: 'error', message: msg })
         return
       }
 
@@ -150,15 +158,22 @@ export function SyncRoot({ children }: { children: ReactNode }) {
 
       try {
         // 3 & 4. Connect, then subscribe explicitly.
+        recordBootStep('connect() called', true, 'includeDefaultStreams: false')
         await powerSyncDb.connect(powerSyncConnector, { includeDefaultStreams: false })
-        if (cancelled) return
+        if (cancelled) { recordBootStep('cancelled after connect', false); return }
+        recordBootStep('connect() returned', true)
+
         await powerSyncDb.syncStream(LISTLY_STREAM).subscribe()
+        recordBootStep(`subscribed to ${LISTLY_STREAM}`, true)
         await powerSyncDb.syncStream(LISTLY_REF_STREAM).subscribe()
+        recordBootStep(`subscribed to ${LISTLY_REF_STREAM}`, true)
         if (cancelled) return
       } catch (e) {
         if (cancelled) return
+        const msg = e instanceof Error ? e.message : String(e)
+        recordBootStep('connect / subscribe', false, msg)
         console.error('[powersync] could not connect or subscribe:', e)
-        setSyncError(e instanceof Error ? e.message : String(e))
+        setSyncError(msg)
         return
       }
 
@@ -183,10 +198,13 @@ export function SyncRoot({ children }: { children: ReactNode }) {
           off()
           void watched.close()
         }
+        recordBootStep('household guard started', true)
       } catch (e) {
         if (cancelled) return
+        const msg = e instanceof Error ? e.message : String(e)
+        recordBootStep('household guard', false, msg)
         console.error('[powersync] household guard failed to start:', e)
-        setSyncError(e instanceof Error ? e.message : String(e))
+        setSyncError(msg)
       }
     }
 

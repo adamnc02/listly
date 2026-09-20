@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Sheet } from './Sheet'
 import { supabase } from '../lib/supabaseClient'
 import { powerSyncDb, LISTLY_STREAM, LISTLY_REF_STREAM } from '../lib/powersync/database'
+import { readBootLog } from '../lib/powersync/bootLog'
 
 /**
  * "Why isn't it syncing?", answered in plain English inside the app.
@@ -168,10 +169,28 @@ export function SyncDiagnostics({ onClose }: { onClose: () => void }) {
   }, [])
 
   const firstFail = checks.find((c) => c.state === 'fail')
+  const boot = readBootLog()
 
   return (
     <Sheet label="Sync check" onClose={onClose}>
       <h2>Sync check</h2>
+
+      {/* The verdict goes FIRST. On 2026-09-20 it was at the bottom and
+          Adam could not see it — the one line that mattered was the one
+          that scrolled off. */}
+      {done && (
+        <div className="card" style={{ padding: 14, borderColor: firstFail ? 'var(--red)' : 'var(--sage)' }}>
+          <div className="lbl" style={{ marginBottom: 4 }}>
+            {firstFail ? 'What to do' : 'All good'}
+          </div>
+          <p className="help" style={{ margin: 0 }}>
+            {firstFail
+              ? firstFail.detail
+              : 'Everything the app can check is working. If it still is not syncing, the two streams may not be deployed in the PowerSync dashboard.'}
+          </p>
+        </div>
+      )}
+
       <p className="help" style={{ marginTop: 0 }}>
         This runs the checks itself. You don’t need to read any logs — just send whatever it says
         below.
@@ -205,18 +224,35 @@ export function SyncDiagnostics({ onClose }: { onClose: () => void }) {
         {!done && <p className="help">Checking…</p>}
       </div>
 
-      {done && (
-        <div className="card" style={{ padding: 14, borderColor: firstFail ? 'var(--red)' : 'var(--sage)' }}>
-          <div className="lbl" style={{ marginBottom: 4 }}>
-            {firstFail ? 'What to do' : 'All good'}
-          </div>
-          <p className="help" style={{ margin: 0 }}>
-            {firstFail
-              ? firstFail.detail
-              : 'Everything the app can check is working. If it still is not syncing, the two streams may not be deployed in the PowerSync dashboard.'}
+      {/* What the boot sequence actually did. PowerSync's own status only
+          describes the CONNECTION — it cannot say that connect() was never
+          reached, which is exactly the gap that made "Not connected. No
+          error reported." undiagnosable. */}
+      <div>
+        <div className="lbl">Startup steps</div>
+        {boot.length === 0 && (
+          <p className="help" style={{ marginTop: 4 }}>
+            Nothing recorded — the sync startup never ran. Reload the page with this open.
           </p>
-        </div>
-      )}
+        )}
+        {boot.map((b, i) => (
+          <div className="mrow" key={i}>
+            <span
+              className="dot"
+              style={{
+                width: 10, height: 10, borderRadius: '50%', flexShrink: 0, marginRight: 4,
+                background: b.ok ? 'var(--sage)' : 'var(--red)',
+              }}
+            />
+            <div className="grow">
+              <div className="st" style={{ fontSize: 19 }}>
+                {b.at} · {b.step}
+              </div>
+              {b.detail && <div className="st">{b.detail}</div>}
+            </div>
+          </div>
+        ))}
+      </div>
 
       <div className="actions">
         <div style={{ flex: 1 }} />
