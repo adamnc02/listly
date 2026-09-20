@@ -1,4 +1,7 @@
 import { useState } from 'react'
+import { AuthProvider, useAuth } from './context/AuthContext'
+import { AuthGate } from './components/AuthGate'
+import { SyncRoot } from './components/SyncRoot'
 import { ListlyProvider } from './context/ListlyContext'
 import { DueSoonBanners } from './components/DueSoonBanners'
 import { BottomNav } from './components/BottomNav'
@@ -47,10 +50,33 @@ function Shell() {
   )
 }
 
+/**
+ * Sign-in is required from the FIRST screen, and there is no guest mode.
+ *
+ * That is not a product preference: in this stack, signing in for the first
+ * time makes all pre-existing local data silently invisible
+ * (MIGRATION-LESSONS §24). Listly sidesteps it entirely by never having
+ * pre-auth data to lose. Do not add a local-only mode later.
+ */
+function Gate() {
+  const { session } = useAuth()
+  // undefined = still checking. Render nothing rather than flashing the
+  // sign-in screen at someone who is already signed in.
+  if (session === undefined) return null
+  if (session === null) return <AuthGate />
+  return (
+    <SyncRoot>
+      <ListlyProvider>
+        <Shell />
+      </ListlyProvider>
+    </SyncRoot>
+  )
+}
+
 export default function App() {
   return (
-    <ListlyProvider>
-      <Shell />
-    </ListlyProvider>
+    <AuthProvider>
+      <Gate />
+    </AuthProvider>
   )
 }
