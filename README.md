@@ -5,7 +5,8 @@ A phone-first PWA for shopping lists and jobs, shared between two phones. Three 
 the spend into [`shared-finance-ledger`](https://github.com/adamnc02/shared-finance-ledger) as a real
 transaction.
 
-Live at **https://adamnc02.github.io/listly/** (after the first deploy).
+Live at **https://adamnc02.github.io/listly/**, served from the `gh-pages` branch and installed on
+an iPhone Home Screen. **Listly targets iOS**; Android is out of scope.
 
 ## Stack
 
@@ -41,12 +42,30 @@ rounded cream tile) and crop just inside it — JPEG compression leaves a soft h
 corners outside the tile's radius are then filled with the tile's own cream `#F5EFE6`, so no white
 shows on Android or in a browser tab, where icons are not masked to a rounded square.
 
-### There is no `DIVERGENCE.md` here, and there should not be one.
+### The ledger bridge writes ONE row, and only ever forwards.
 
-`shared-finance-ledger` has one because it is a copy of `personal-ledger` and has to stay in step with
-it. **Listly is not a copy of anything**, so there is nothing to keep in step and nothing to enforce.
-Adding one out of habit would create a rule with no meaning that someone would then feel obliged to
-follow.
+Finishing a priced shop writes a `listly.shop_completions` row; a trigger **inside the database**
+turns it into a `shared_finance_ledger.transactions` row. That is the whole of Listly's write path
+into another app's schema. Three rules hold it together:
+
+- **The trigger must never `raise`.** A raising trigger blocks that device's *entire* PowerSync
+  upload queue, so a stale category id would stop the shopping list syncing. It records
+  `ledger_error` and returns, and the app surfaces that with a Retry.
+- **A transaction deleted in the ledger stays deleted.** Deleting it there is a decision; Listly does
+  not quietly undo it. The trigger refuses to re-book a completion that already carries a
+  `transaction_id`.
+- **What was bought never crosses.** Only the amount, date, category, account and the list's *name*
+  reach the ledger. The ticked items are kept in `shop_completions.items_snapshot`, which the trigger
+  never reads.
+
+`docs/LEDGER-INTEGRATION.md` is the full picture, and the page a *ledger* developer should read.
+
+### Cancelling Finish shop changes nothing, and that is load-bearing.
+
+Nothing is deleted until the outcome is known — Save and "Don't price it" clear the ticked items,
+cancel does not. It is deliberately **not** implemented as delete-then-restore: re-inserting items
+would mint new ids, and an item's identity has to stay stable or two devices never converge on it.
+`snapshotShop()` is read-only; `finishShop()` is the destructive half. Keep them apart.
 
 ### Dates go through `src/lib/date.ts`, always.
 
@@ -63,6 +82,35 @@ overlay inside one gets clipped, and neither a z-index bump nor switching to `ab
 second makes it worse. `MIGRATION-LESSONS.md` §15 took three attempts to reach that conclusion.
 `src/components/Sheet.tsx` is the one place this is implemented; use it.
 
+Any new overlay must also respect the stacking contract, because the bottom nav now floats:
+
+| Layer | z-index |
+|---|---|
+| scrolling content | 0–2 |
+| edge fades | 50 |
+| floating nav | **100** |
+| the sync-error banner | 400 |
+| modal overlays (`.sheet-root`) | **500** |
+
+### The nav is `position: absolute`, not `fixed`.
+
+`fixed` on iOS standalone relies on WebKit's own internal sense of the viewport, which is stale on
+first paint until a real scroll forces a recompute — and Listly locks page scrolling, so that scroll
+never comes. `html`, `body`, `.app` and the nav are all sized from one JS-measured `--app-height`.
+It is also a pill inset 12px each side, because a full-bleed bar's corners collide with the phone's
+own rounded screen corners.
+
+### A control with nothing to do says so BEFORE it is tapped.
+
+Every "add"-style control, and Finish shop, renders at `.waiting` opacity while there is nothing to
+do, explains itself if tapped anyway, and names a failed write rather than swallowing it. A control
+that silently ignores a tap is indistinguishable from a broken one — that cost three rounds of
+debugging on "Add list did nothing".
+
+🚩 The rule is `.waiting`, **unscoped**. It used to be `.btn.waiting`, which silently excluded the
+round `+` add-item button (an `.icon-btn`), so that button carried the class and got no styling at
+all for a week.
+
 ## Running it
 
 ```bash
@@ -76,6 +124,9 @@ npm run deploy     # builds, then publishes dist/ to the gh-pages branch
 
 > `npm run deploy` publishes the live site. Per this project's working rules it is **never** run
 > without Adam asking for it in so many words.
+>
+> There is no CI: the `gh-pages` branch is whatever the last `npm run deploy` pushed, built from
+> whatever was in the working tree at the time. Deploy from `main`, after merging.
 
 ### `.env.local`
 
@@ -108,7 +159,7 @@ app's data.
 | `docs/ARCHITECTURE.md` | The sync layer: the two Sync Streams, the `lst_`/`lst_ref_` prefixes and why, upload ordering, the mapping boundary. |
 | `docs/LEDGER-INTEGRATION.md` | **The page a ledger developer should read.** The gate, the trigger, the field mapping, and the blast-radius table. |
 | `silver-octo-invention/docs/listly-SUPABASE.md` | The schema, RLS and functions, plus a generated ERD. |
-| `Downloads/App Development & Bug Tracking/listly/` | The build plan, prompts, Adam's dashboard tasks and app knowledge. |
+| `Downloads/App Development & Bug Tracking/listly/` | The build plan, prompts, Adam's dashboard tasks, app knowledge and the UAT scripts. |
 
 The planning documents (`LISTLY-DESIGN.md`, `listly-prototype.html`) deliberately do **not** live in
 this repo — they are design inputs, and their home is that Downloads folder.

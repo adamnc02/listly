@@ -10,7 +10,7 @@ ledger changes a blast radius they would not otherwise have.
 **Nothing in Postgres or PowerSync will warn you when a change here breaks Listly.** Every failure
 in the table below is silent.
 
-**State:** Phases 1–4 complete (2026-09-20). Listly reads the ledger, depends on its functions, and
+**State:** Phases 1–4 complete and UAT-signed-off (2026-09-20). Listly reads the ledger, depends on its functions, and
 **writes into `shared_finance_ledger.transactions`** — live since migrations `20260920160000` and
 `20260920160200`. The write path is described at the end.
 
@@ -125,11 +125,22 @@ app's table rather than assumed.
   book as `pending` instead of `cleared`. Everything compares against
   `(now() at time zone 'Europe/London')::date`.
 
-### Edits and deletes are out of scope
+### Edits and deletes are out of scope, and a delete is permanent
 
 Once a shop is booked it is edited **in the ledger app**. Listly is not a second editor for the same
 row — that is a merge problem nobody asked for. Changing the amount in Listly does **not** rewrite
 the ledger row, and there is a test asserting that so nobody "fixes" it later.
+
+🚨 **And if you delete the transaction here, Listly will never put it back** (`20260920170000`).
+Deleting it is a decision, and the bridge does not quietly undo it. The function returns early
+whenever the completion already carries a `transaction_id` — read from `OLD` on an UPDATE, and
+looked up **by primary key on an INSERT**, because a PowerSync upsert fires `before insert` first
+with no `OLD` row. Without that second half a re-sent upload resurrected deleted transactions; it
+was reproduced before it was fixed, and `behaviour-listly-bridge.mjs` scenario 11 still reproduces
+it against the pre-migration function.
+
+The completion row keeps its `transaction_id` either way, so Listly still shows the shop as priced.
+That is deliberate: Listly's own history is not rewritten by a decision taken in the ledger.
 
 The one exception is the retry. When the ledger write fails, the completion row carries
 `ledger_error` and Listly shows "Couldn't add to the ledger — tap to retry".
