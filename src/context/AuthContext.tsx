@@ -61,7 +61,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const signInWithGoogle = async () => {
-    const { error } = await supabase.auth.signInWithOAuth({
+    // 🚨 Record the attempt BEFORE navigating away. An OAuth round trip
+    // destroys the page, so a console.log here is gone by the time it
+    // matters and the console does not preserve logs by default. If we come
+    // back without a session, AuthGate reads this and can say what redirect
+    // was actually requested — which is the single most useful fact when
+    // sign-in "does nothing" (MIGRATION-LESSONS §2: three different switches
+    // can cause it, and the failure is silent).
+    try {
+      sessionStorage.setItem(
+        'listly:auth:attempt',
+        JSON.stringify({ at: new Date().toISOString(), redirectTo: window.location.href }),
+      )
+    } catch {
+      // Private mode. The console warning below is still there.
+    }
+    const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       // 🚨 Explicit redirectTo. Without it the redirect silently falls back
       // to the project's Site URL — which is another app's deployed URL, and
@@ -73,8 +88,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // dev URL, or the same silent fallback happens while testing.
       options: { redirectTo: window.location.href },
     })
-    if (error) throw error
-    // Redirect-based flow — the browser navigates away; nothing further here.
+    if (error) {
+      console.error('[auth] signInWithOAuth refused:', error)
+      throw error
+    }
+    // Redirect-based flow: supabase-js navigates the browser. If we are still
+    // here a moment later, it did NOT — which is a real failure mode worth
+    // naming rather than leaving as a button that appears to do nothing.
+    console.info('[auth] redirecting to Google:', data?.url)
+    setTimeout(() => {
+      if (!document.hidden) {
+        console.warn('[auth] still on the page after signInWithOAuth — the redirect did not happen.')
+      }
+    }, 2500)
   }
 
   const submitEmailAuth: AuthContextValue['submitEmailAuth'] = async (email, password) => {

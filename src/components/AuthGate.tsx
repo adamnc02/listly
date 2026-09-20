@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { useAuth } from '../context/AuthContext'
 import icon from '/apple-touch-icon.png'
 
@@ -52,6 +52,51 @@ export function AuthGate() {
       setBusy(false)
     }
   }
+
+  /**
+   * 🚨 Report a failed OAuth round trip instead of silently returning to the
+   * sign-in screen.
+   *
+   * Adam, 2026-09-20: "the new continue with google button does nothing, the
+   * app flashes and remains on the login screen" — with NOTHING in the
+   * console. That is the shape of every failure MIGRATION-LESSONS §2
+   * describes: three independent switches (the Supabase provider, the Google
+   * Cloud client's Authorized redirect URIs, and Supabase's own Redirect URLs
+   * allow-list) can each cause it, and the allow-list one in particular
+   * fails with NO error at all — Supabase just quietly substitutes the
+   * project's Site URL.
+   *
+   * So: if the provider handed back an error in the URL, show it. And if we
+   * returned from an attempt with no session and no error, say that too,
+   * along with the redirect that was actually requested.
+   */
+  useEffect(() => {
+    const params = new URLSearchParams(
+      window.location.hash.startsWith('#') ? window.location.hash.slice(1) : window.location.search,
+    )
+    const oauthError = params.get('error_description') ?? params.get('error')
+    if (oauthError) {
+      setError(`Sign-in was refused: ${oauthError}`)
+      // Clear it so a reload does not keep showing a stale failure.
+      window.history.replaceState({}, '', window.location.pathname)
+      try { sessionStorage.removeItem('listly:auth:attempt') } catch { /* private mode */ }
+      return
+    }
+    try {
+      const raw = sessionStorage.getItem('listly:auth:attempt')
+      if (!raw) return
+      sessionStorage.removeItem('listly:auth:attempt')
+      const attempt = JSON.parse(raw) as { at: string; redirectTo: string }
+      // Back on the sign-in screen after an attempt = no session was created.
+      setError(
+        `Sign-in came back without creating a session. The redirect requested was ${attempt.redirectTo} — ` +
+          'that exact URL has to be in Supabase → Authentication → URL Configuration → Redirect URLs, ' +
+          'and this project\u2019s callback has to be in the Google Cloud OAuth client\u2019s Authorized redirect URIs.',
+      )
+    } catch {
+      // Private mode, or unparseable. Nothing to report.
+    }
+  }, [])
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault()
