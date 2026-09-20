@@ -109,9 +109,17 @@ export function AccountModal({ onClose }: { onClose: () => void }) {
 
       <div>
         <div className="lbl">Join someone else’s household</div>
+        {/* 🚨 The one-login-per-person assumption, stated where it actually
+            bites (PROMPT-01 §6A.5 asks for it "on the linking screen"). If
+            two people shared a login, My jobs would be shared too and there
+            would be no way for it not to be — the database has no second
+            identity to tell them apart by. The link code exists precisely so
+            they do not have to share one. It used to be on the sign-in
+            screen; moved here 2026-09-20 (Adam), which is the screen it is
+            actually about. */}
         <p className="help">
-          You move into their household and see its Shopping and House jobs. My jobs always stays
-          yours.
+          You move into their household and see its Shopping and House jobs. <b>My jobs</b> always
+          stays yours — you each need your own account for that to work.
         </p>
         <input
           className="field"

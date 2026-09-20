@@ -145,15 +145,6 @@ export function AuthGate() {
             </div>
           </div>
 
-          {/* The one-login-per-person assumption, said out loud where it
-              matters. My jobs cannot be private if two people share a login,
-              and there is no way for the database to tell them apart — the
-              link code exists precisely so they do not have to. */}
-          <p className="help" style={{ padding: '0 6px' }}>
-            You and your partner each need your own account. <b>My jobs</b> is private to whoever is
-            signed in, and the household link code is what shares Shopping and House jobs between
-            the two of you.
-          </p>
         </div>
       </main>
     </div>
