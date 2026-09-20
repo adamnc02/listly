@@ -18,8 +18,8 @@ export function ManageListsSheet({ onClose }: { onClose: () => void }) {
   const [draft, setDraft] = useState('')
 
   const submit = () => {
-    addList(draft, true)
-    setDraft('')
+    if (!draft.trim()) return
+    void addList(draft, true).then(() => setDraft(''))
   }
 
   return (

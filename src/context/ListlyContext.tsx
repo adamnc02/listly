@@ -37,7 +37,7 @@ interface ListlyValue {
   device: DeviceState
 
   visibleLists: List[]
-  addList: (name: string, isDefault: boolean) => void
+  addList: (name: string, isDefault: boolean) => Promise<void>
   deleteList: (id: string) => void
   toggleDefault: (id: string) => void
   setListOpen: (id: string, open: boolean) => void
@@ -128,17 +128,17 @@ export function ListlyProvider({ children }: { children: ReactNode }) {
   const findJob = useCallback((id: string) => jobs.find((j) => j.id === id), [jobs])
 
   const addList = useCallback(
-    (name: string, isDefault: boolean) => {
+    async (name: string, isDefault: boolean) => {
       const trimmed = name.trim()
       if (!trimmed) return
-      run(
-        writes.insertList(householdId, trimmed, isDefault).then((id) => {
-          // A list added from the Shopping page opens ready for its first
-          // item; one added from Manage lists does not, because you are still
-          // in the sheet and about to add another.
-          if (!isDefault) setDevice((d) => withListOpen(d, id, true))
-        }),
-      )
+      // Deliberately NOT wrapped in run(): the caller awaits this so it can
+      // show the user why it failed. Swallowing the error here is what made
+      // "Add list did nothing" undiagnosable.
+      const id = await writes.insertList(householdId, trimmed, isDefault)
+      // A list added from the Shopping page opens ready for its first item;
+      // one added from Manage lists does not, because you are still in the
+      // sheet and about to add another.
+      if (!isDefault) setDevice((d) => withListOpen(d, id, true))
     },
     [householdId],
   )

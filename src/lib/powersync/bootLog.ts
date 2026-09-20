@@ -17,20 +17,22 @@
  * any single render.
  */
 
+export type BootLevel = 'ok' | 'fail' | 'note'
+
 export interface BootStep {
   at: string
   step: string
-  ok: boolean
+  level: BootLevel
   detail?: string
 }
 
 const steps: BootStep[] = []
 
-export function recordBootStep(step: string, ok: boolean, detail?: string): void {
-  steps.push({ at: new Date().toLocaleTimeString('en-GB'), step, ok, detail })
-  const line = `[listly] boot: ${step} — ${ok ? 'ok' : 'FAILED'}${detail ? ` — ${detail}` : ''}`
-  if (ok) console.info(line)
-  else console.error(line)
+export function recordBootStep(step: string, level: BootLevel, detail?: string): void {
+  steps.push({ at: new Date().toLocaleTimeString('en-GB'), step, level, detail })
+  const line = `[listly] boot: ${step} — ${level}${detail ? ` — ${detail}` : ''}`
+  if (level === 'fail') console.error(line)
+  else console.info(line)
 }
 
 export function readBootLog(): BootStep[] {

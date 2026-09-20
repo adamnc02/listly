@@ -241,7 +241,8 @@ export function SyncDiagnostics({ onClose }: { onClose: () => void }) {
               className="dot"
               style={{
                 width: 10, height: 10, borderRadius: '50%', flexShrink: 0, marginRight: 4,
-                background: b.ok ? 'var(--sage)' : 'var(--red)',
+                background:
+                  b.level === 'ok' ? 'var(--sage)' : b.level === 'fail' ? 'var(--red)' : 'var(--line-2)',
               }}
             />
             <div className="grow">

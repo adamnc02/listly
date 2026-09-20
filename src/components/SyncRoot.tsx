@@ -123,13 +123,13 @@ export function SyncRoot({ children }: { children: ReactNode }) {
 
     const boot = async () => {
       clearBootLog()
-      recordBootStep('boot started', true, `user ${userId.slice(0, 8)}…`)
+      recordBootStep('boot started', 'ok', `user ${userId.slice(0, 8)}…`)
       let hh: string
       try {
         // 1. The household, from the ledger's own function.
         hh = await withTimeout(getHouseholdId(userId), 20000, 'Setting up your household')
-        if (cancelled) { recordBootStep('cancelled after ensure_household', false); return }
-        recordBootStep('ensure_household', true, `household ${hh.slice(0, 8)}…`)
+        if (cancelled) { recordBootStep('restarted (dev only)', 'note', 'React StrictMode re-runs effects in dev; harmless, and absent in a production build'); return }
+        recordBootStep('ensure_household', 'ok', `household ${hh.slice(0, 8)}…`)
         setHouseholdId(hh)
 
         // 2. The §20 smoke test, before anything depends on REST working.
@@ -138,17 +138,17 @@ export function SyncRoot({ children }: { children: ReactNode }) {
           20000,
           'Checking the Listly schema',
         )
-        if (cancelled) { recordBootStep('cancelled after schema check', false); return }
+        if (cancelled) { recordBootStep('restarted (dev only)', 'note', 'React StrictMode re-runs effects in dev; harmless, and absent in a production build'); return }
         if (reachErr) {
-          recordBootStep('listly schema reachable', false, reachErr)
+          recordBootStep('listly schema reachable', 'fail', reachErr)
           setStatus({ kind: 'error', message: reachErr })
           return
         }
-        recordBootStep('listly schema reachable', true)
+        recordBootStep('listly schema reachable', 'ok')
       } catch (e) {
         if (cancelled) return
         const msg = e instanceof Error ? e.message : String(e)
-        recordBootStep('blocking startup', false, msg)
+        recordBootStep('blocking startup', 'fail', msg)
         setStatus({ kind: 'error', message: msg })
         return
       }
@@ -171,26 +171,26 @@ export function SyncRoot({ children }: { children: ReactNode }) {
         // PROMPT-01 §9.3 shows connect-then-subscribe; that ordering is
         // wrong for a client with no auto-subscribed streams.
         await powerSyncDb.syncStream(LISTLY_STREAM).subscribe()
-        recordBootStep(`subscribed to ${LISTLY_STREAM}`, true)
+        recordBootStep(`subscribed to ${LISTLY_STREAM}`, 'ok')
         await powerSyncDb.syncStream(LISTLY_REF_STREAM).subscribe()
-        recordBootStep(`subscribed to ${LISTLY_REF_STREAM}`, true)
+        recordBootStep(`subscribed to ${LISTLY_REF_STREAM}`, 'ok')
         if (cancelled) return
 
         // Belt and braces: never await this indefinitely again. If it has
         // not settled in 30s something is wrong, and a visible message beats
         // a spinner that lasts forever.
-        recordBootStep('connect() called', true, 'includeDefaultStreams: false')
+        recordBootStep('connect() called', 'ok', 'includeDefaultStreams: false')
         await withTimeout(
           powerSyncDb.connect(powerSyncConnector, { includeDefaultStreams: false }),
           30000,
           'Connecting to the sync service',
         )
-        if (cancelled) { recordBootStep('cancelled after connect', false); return }
-        recordBootStep('connect() returned', true)
+        if (cancelled) { recordBootStep('restarted (dev only)', 'note', 'React StrictMode re-runs effects in dev; harmless, and absent in a production build'); return }
+        recordBootStep('connect() returned', 'ok')
       } catch (e) {
         if (cancelled) return
         const msg = e instanceof Error ? e.message : String(e)
-        recordBootStep('connect / subscribe', false, msg)
+        recordBootStep('connect / subscribe', 'fail', msg)
         console.error('[powersync] could not connect or subscribe:', e)
         setSyncError(msg)
         return
@@ -217,11 +217,11 @@ export function SyncRoot({ children }: { children: ReactNode }) {
           off()
           void watched.close()
         }
-        recordBootStep('household guard started', true)
+        recordBootStep('household guard started', 'ok')
       } catch (e) {
         if (cancelled) return
         const msg = e instanceof Error ? e.message : String(e)
-        recordBootStep('household guard', false, msg)
+        recordBootStep('household guard', 'fail', msg)
         console.error('[powersync] household guard failed to start:', e)
         setSyncError(msg)
       }
