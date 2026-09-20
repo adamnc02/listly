@@ -7,19 +7,34 @@ import { assertListlySchemaReachable } from '../lib/supabaseClient'
 /**
  * Boots sync, and holds the household guard.
  *
- * Sequence, in order and for reasons:
- *   1. ensure_household() — Listly reuses the ledger's household (D6), so
- *      this is what makes the shared link code work with nothing to set up.
- *   2. The §20 smoke test. A real signed-in call against the `listly` schema,
- *      run DELIBERATELY. PGRST106 ("schema not exposed") is invisible
- *      otherwise: PowerSync replicates Postgres directly, so sync looks
- *      perfectly healthy while every REST call fails. On personal-f that hid
- *      a broken schema for an entire build.
- *   3. connect(), with includeDefaultStreams: false — personal-f's
- *      `household_data` stream is auto_subscribe: true and would otherwise
- *      land in Listly.
- *   4. Subscribe to Listly's two streams explicitly.
- *   5. Start the §38 household guard.
+ * 🚨 THE UI IS NEVER BLOCKED ON THE NETWORK. This is an offline-first app —
+ * the whole point is that it works standing in a shop with no signal — so
+ * waiting for connect() before rendering anything was backwards. It also hid
+ * a real failure: on 2026-09-20 the first live run sat on "Getting your
+ * lists…" indefinitely, because a step that never resolves and never throws
+ * has no way to report itself.
+ *
+ * So only the two steps that genuinely cannot be done offline are awaited,
+ * each with a timeout, and everything else happens behind the rendered app:
+ *
+ *   BLOCKING (with a 20s timeout, then a readable error):
+ *     1. ensure_household() — Listly reuses the ledger's household (D6), and
+ *        every write needs its id. Cached per session afterwards.
+ *     2. The §20 smoke test: a real signed-in call against the `listly`
+ *        schema. PGRST106 ("schema not exposed") is invisible otherwise —
+ *        PowerSync replicates Postgres directly, so sync looks perfectly
+ *        healthy while every REST call fails. That hid a broken schema for an
+ *        entire build on personal-f.
+ *
+ *   BACKGROUND (the app is already usable):
+ *     3. connect(), with includeDefaultStreams: false — personal-f's
+ *        `household_data` stream is auto_subscribe: true and would otherwise
+ *        land in Listly.
+ *     4. Subscribe to Listly's two streams.
+ *     5. The §38 household guard.
+ *
+ * `syncError` surfaces a background failure in the UI instead of leaving the
+ * app looking fine but never syncing.
  */
 
 type Status =
@@ -33,6 +48,7 @@ export function SyncRoot({ children }: { children: ReactNode }) {
   const userId = session?.user?.id ?? null
   const [status, setStatus] = useState<Status>({ kind: 'starting' })
   const [householdId, setHouseholdId] = useState<string | null>(null)
+  const [syncError, setSyncError] = useState<string | null>(null)
 
   /**
    * 🚨 THE §38 GUARD.
@@ -95,30 +111,58 @@ export function SyncRoot({ children }: { children: ReactNode }) {
     let cancelled = false
     let unsubscribeWatch: (() => void) | null = null
 
+    /** Never let one unresolved promise hang the whole app silently. */
+    const withTimeout = <T,>(p: Promise<T>, ms: number, what: string): Promise<T> =>
+      Promise.race([
+        p,
+        new Promise<T>((_, reject) =>
+          setTimeout(() => reject(new Error(`${what} timed out after ${ms / 1000}s.`)), ms),
+        ),
+      ])
+
     const boot = async () => {
+      let hh: string
       try {
         // 1. The household, from the ledger's own function.
-        const hh = await getHouseholdId(userId)
+        hh = await withTimeout(getHouseholdId(userId), 20000, 'Setting up your household')
         if (cancelled) return
         setHouseholdId(hh)
 
         // 2. The §20 smoke test, before anything depends on REST working.
-        const reachErr = await assertListlySchemaReachable()
+        const reachErr = await withTimeout(
+          assertListlySchemaReachable(),
+          20000,
+          'Checking the Listly schema',
+        )
         if (cancelled) return
         if (reachErr) {
           setStatus({ kind: 'error', message: reachErr })
           return
         }
+      } catch (e) {
+        if (cancelled) return
+        setStatus({ kind: 'error', message: e instanceof Error ? e.message : String(e) })
+        return
+      }
 
+      // The app is usable from here. Everything below is background.
+      setStatus({ kind: 'ready' })
+
+      try {
         // 3 & 4. Connect, then subscribe explicitly.
         await powerSyncDb.connect(powerSyncConnector, { includeDefaultStreams: false })
         if (cancelled) return
         await powerSyncDb.syncStream(LISTLY_STREAM).subscribe()
         await powerSyncDb.syncStream(LISTLY_REF_STREAM).subscribe()
         if (cancelled) return
+      } catch (e) {
+        if (cancelled) return
+        console.error('[powersync] could not connect or subscribe:', e)
+        setSyncError(e instanceof Error ? e.message : String(e))
+        return
+      }
 
-        setStatus({ kind: 'ready' })
-
+      try {
         // 5. The guard, re-evaluated on every delivery that touches
         // membership. `query(...).watch()` is the current API; `db.watch()`'s
         // AsyncIterator/callback forms are kept only for backwards
@@ -141,7 +185,8 @@ export function SyncRoot({ children }: { children: ReactNode }) {
         }
       } catch (e) {
         if (cancelled) return
-        setStatus({ kind: 'error', message: e instanceof Error ? e.message : String(e) })
+        console.error('[powersync] household guard failed to start:', e)
+        setSyncError(e instanceof Error ? e.message : String(e))
       }
     }
 
@@ -167,6 +212,7 @@ export function SyncRoot({ children }: { children: ReactNode }) {
     seenMembership.current = false
     setStatus({ kind: 'starting' })
     setHouseholdId(null)
+    setSyncError(null)
     void powerSyncDb.disconnect().catch(() => {})
   }, [userId])
 
@@ -204,7 +250,20 @@ export function SyncRoot({ children }: { children: ReactNode }) {
     )
   }
 
-  return <HouseholdContext.Provider value={householdId}>{children}</HouseholdContext.Provider>
+  return (
+    <HouseholdContext.Provider value={householdId}>
+      {children}
+      {/* A background sync failure is SHOWN, not swallowed — an app that
+          looks fine but never syncs is the failure mode this workstream
+          keeps paying for. Fixed rather than in the flow, so it cannot
+          disturb the app shell's own layout. */}
+      {syncError && (
+        <div className="sync-error" role="alert">
+          <b>Not syncing.</b> {syncError}
+        </div>
+      )}
+    </HouseholdContext.Provider>
+  )
 }
 
 function Splash({ children, tone }: { children: ReactNode; tone?: 'error' }) {

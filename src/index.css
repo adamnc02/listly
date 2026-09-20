@@ -54,6 +54,17 @@
 
 * { box-sizing: border-box; }
 
+/* 🚨 #root, not .app, is body's flex child. Without this it shrink-wraps to
+   its content, and .app's `width: 100%` then resolves against THAT rather
+   than the viewport — which is why the app rendered as a ~750px sliver on a
+   1440px display (Adam, 2026-09-20). Styling .app alone could never have
+   fixed it. */
+#root {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
 html, body {
   margin: 0;
   height: 100%;
@@ -79,7 +90,12 @@ button, .row, .listhead { -webkit-tap-highlight-color: transparent; }
 
 .app {
   width: 100%;
-  max-width: 430px;
+  /* NO max-width. Listly is phone-first, but it is a real app on a desktop
+     too, and every other app on this account (personal-f, my-dream-clean,
+     shared-finance-ledger) fills the window. A 430px column centred in a
+     27-inch display reads as broken, not as phone-first — the prototype was
+     a phone MOCKUP and that constraint belonged to the mockup, not the app
+     (Adam, 2026-09-20). */
   height: var(--app-height);
   position: relative;
   overflow: hidden;
@@ -87,6 +103,12 @@ button, .row, .listhead { -webkit-tap-highlight-color: transparent; }
   flex-direction: column;
   background: var(--ground);
 }
+
+/* Content stays readable when the window is wide: the shell fills, the
+   content column does not stretch to arm's length. */
+.stack, header > .grow, .sheet > * { max-width: 720px; }
+header, main > .stack { margin-left: auto; margin-right: auto; }
+.sheet { align-items: stretch; }
 
 /* ---------- header ---------- */
 header {
@@ -380,6 +402,37 @@ nav button {
 }
 nav button[aria-current=page] { background: var(--brown); color: #fff; }
 
+/* A genuine OAuth button. It deliberately does NOT use Listly's palette:
+   Google's branding is the point — people recognise it, and a brown
+   handwritten button that says "Google" reads as a phishing attempt. This
+   matches personal-f, my-dream-clean and shared-finance-ledger, which all
+   put the real multi-colour mark on a plain surface. Only genuine OAuth
+   methods diverge from the app's design like this. */
+.btn.oauth {
+  background: #fff;
+  color: #3c4043;
+  border: 1.5px solid var(--line-2);
+  font-weight: 700;
+  width: 100%;
+  justify-content: center;
+}
+
+.sync-error {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(90px + var(--safe-bottom));
+  z-index: 400;
+  max-width: min(92vw, 680px);
+  background: var(--red);
+  color: #fff;
+  font-size: 19px;
+  line-height: 1.25;
+  padding: 10px 16px;
+  border-radius: 14px;
+  box-shadow: 0 4px 12px rgba(179, 54, 44, .28);
+}
+
 /* ---------- bottom sheets ---------- */
 /* Rendered through createPortal to document.body, never from inside <main>:
    page components live in a scrolling, overflow-y:auto container, and an
@@ -396,7 +449,7 @@ nav button[aria-current=page] { background: var(--brown); color: #fff; }
 }
 .scrim {
   width: 100%;
-  max-width: 430px;
+  max-width: 720px;
   background: rgba(59, 47, 38, .4);
   display: flex; flex-direction: column; justify-content: flex-end;
 }
