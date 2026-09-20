@@ -34,12 +34,23 @@ export function SyncStatusDot() {
   }, [])
 
   const connected = status?.connected ?? false
+  const connecting = status?.connecting ?? false
   const synced = status?.hasSynced ?? false
   const busy = (status?.downloading ?? false) || (status?.uploading ?? false)
+  // 🚨 The field that actually says WHY. Without it, "Offline" is
+  // indistinguishable from "the server refused us", which is exactly the
+  // ambiguity that cost time on 2026-09-20.
+  const err = status?.downloadError ?? status?.uploadError
 
   let label: string | null = null
   let colour = 'var(--sage)'
-  if (!connected) {
+  if (err) {
+    label = 'Sync failed'
+    colour = 'var(--red)'
+  } else if (connecting && !connected) {
+    label = 'Connecting…'
+    colour = 'var(--brown-2)'
+  } else if (!connected) {
     label = 'Offline'
     colour = 'var(--muted)'
   } else if (busy) {
@@ -49,9 +60,21 @@ export function SyncStatusDot() {
     colour = 'var(--brown-2)'
   }
 
-  const title = status?.lastSyncedAt
-    ? `Last synced ${status.lastSyncedAt.toLocaleTimeString('en-GB')}`
-    : 'Not synced yet'
+  const title = [
+    err ? `Sync error: ${err.message}` : null,
+    status?.lastSyncedAt
+      ? `Last synced ${status.lastSyncedAt.toLocaleTimeString('en-GB')}`
+      : 'Not synced yet',
+    `connected=${connected} connecting=${connecting} hasSynced=${synced}`,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+
+  // One line in the console on every status change, so a failure leaves a
+  // trail even if nobody is looking at the header at the time.
+  useEffect(() => {
+    if (err) console.error('[listly] sync status error:', err)
+  }, [err])
 
   return (
     <span className="sync-dot" title={title}>
