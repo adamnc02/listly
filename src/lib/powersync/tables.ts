@@ -97,6 +97,14 @@ export const SYNCED_TABLES: SyncedTable[] = [
     list_id: 'text', list_name: 'text', completed_at: 'text',
     amount: 'real', spend_date: 'text', category_id: 'text', payment_method: 'text',
     location: 'text', owner_id: 'text', pot_id: 'text',
+    // What was bought, kept in LISTLY ONLY. Adam, 2026-09-20: "only amount
+    // needs to be recorded to shared-ledger-finance, but would be handy to
+    // have that information in listly's tables". The ledger-bridge trigger
+    // never reads it, so no item detail can reach shared_finance_ledger.
+    // A newline-separated snapshot of the ticked names, deliberately not a
+    // foreign key: Finish shop deletes those item rows, and the point of a
+    // snapshot is that it outlives them.
+    items_snapshot: 'text',
     // Written by the ledger-bridge trigger, never by the app. Synced so the
     // UI can show "couldn't add to the ledger — tap to retry" instead of
     // failing silently, which is the failure mode this workstream keeps
@@ -105,7 +113,7 @@ export const SYNCED_TABLES: SyncedTable[] = [
   }),
 
   // ── Read-only mirrors of shared_finance_ledger ───────────────────────────
-  // Five small tables, so the D4 gate and every picker work standing in a
+  // Four small tables, so the D4 gate and every picker work standing in a
   // shop with no signal. Deliberately NOT the ledger's own 27-table stream:
   // Listly has no business holding Adam's loans and salary history.
   //
@@ -114,17 +122,29 @@ export const SYNCED_TABLES: SyncedTable[] = [
   // ORDERING ONLY — Listly reads it and writes it never.
   ref('people', { ...H, name: 'text', color: 'text', linked_user_id: 'text', ...P }),
   ref('categories', { ...H, name: 'text', icon: 'text', icon_color: 'text', is_built_in: 'bool', ...P }),
-  ref('pots', { ...H, person_id: 'text', name: 'text', active: 'bool', ...P }),
-  // Present because PROMPT-01 §9.2 specifies it, but currently UNREAD: the
-  // location picker excludes savings pots by design (§8.2b — the ledger's own
-  // ad-hoc entry excludes them, and Listly must produce exactly what the
-  // ledger would). If it is still unread when the ledger bridge ships, drop
-  // it from here and from the stream rather than syncing dead data.
-  ref('savings_pots', { ...H, person_id: 'text', name: 'text', active: 'bool', ...P }),
+  // `is_coin_jar` is synced so the location picker can EXCLUDE coin jars, the
+  // same way the ledger's own ad-hoc entry does (`fundablePots()` in
+  // roundUp.ts). A Coin Jar is a round-up destination, not somewhere a shop
+  // is paid from. Listly must offer exactly what the ledger would.
+  ref('pots', { ...H, person_id: 'text', name: 'text', active: 'bool', is_coin_jar: 'bool', ...P }),
+  // 🚨 savings_pots is deliberately ABSENT, removed 2026-09-20 (Adam, Phase 4).
+  // The location picker excludes savings pots by design (§8.2b — the ledger's
+  // own ad-hoc entry excludes them, and Listly must produce exactly what the
+  // ledger would), so syncing them was dead data. This is a change to what
+  // Listly SUBSCRIBES to and nothing else: shared_finance_ledger.savings_pots
+  // is untouched and the ledger keeps using it normally. Re-adding it means a
+  // dashboard redeploy of the listly_ledger_ref stream, so do not do it
+  // casually.
   // A household singleton. Its ABSENCE is the signal that matters: with no
   // joint account row, the picker omits "Joint account" entirely rather than
   // offering something that cannot be booked.
-  ref('joint_account', { ...H, opening_balance: 'real', opening_date: 'text' }),
+  // 🚩 `opening_balance_date`, NOT `opening_date`. Declared wrong in Phase 3
+  // and caught on 2026-09-20 by check-app-schema.mjs the first time it was
+  // pointed at Listly (MIGRATION-LESSONS §41). Nothing read it, so nothing
+  // broke — a mirror column PowerSync never fills just reads back null, with
+  // no error. That is the whole failure mode: two files inside one repo
+  // agreeing with each other prove nothing about the third.
+  ref('joint_account', { ...H, opening_balance: 'real', opening_balance_date: 'text' }),
   // 🚨 THE §38 GUARD'S DATA SOURCE, and the reason this table is here at all.
   //
   // The household can change under an open device — someone redeems a link

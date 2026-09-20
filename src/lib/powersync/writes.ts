@@ -2,7 +2,7 @@ import { powerSyncDb } from './database'
 import { appendPosition, midpoint, positionOf, toDbId, type Row } from './mapping'
 import { newId } from '../ids'
 import { todayIso } from '../date'
-import type { IsoDate, JobPage } from '../../types'
+import type { IsoDate, JobPage, ShopCompletionDraft } from '../../types'
 
 /**
  * One function per mutation, so the context stays thin.
@@ -125,9 +125,89 @@ export async function repositionItem(listId: string, itemId: string, toIndex: nu
   await powerSyncDb.execute('UPDATE lst_shopping_items SET position = ? WHERE id = ?', [pos, itemId])
 }
 
+/** The ticked item names, in list order, before Finish shop deletes them. */
+export async function tickedItemNames(listId: string): Promise<string[]> {
+  const rows = await powerSyncDb.getAll<Row>(
+    'SELECT text FROM lst_shopping_items WHERE list_id = ? AND done = 1 ORDER BY position, id',
+    [listId],
+  )
+  return rows.map((r) => String(r.text ?? '')).filter(Boolean)
+}
+
 /** Finish shop: ticked items go, unticked stay. One statement, no read. */
 export async function clearDoneItems(listId: string): Promise<void> {
   await powerSyncDb.execute('DELETE FROM lst_shopping_items WHERE list_id = ? AND done = 1', [listId])
+}
+
+// ── the ledger bridge ───────────────────────────────────────────────────────
+
+/**
+ * A priced shop. Writing this row is the ENTIRETY of Listly's write path into
+ * `shared_finance_ledger`: a `BEFORE INSERT OR UPDATE OF amount` trigger on
+ * the server turns it into a real `transactions` row
+ * (`20260920160000_listly_ledger_bridge`).
+ *
+ * It is a local INSERT, so it works offline and syncs when there is signal.
+ * Nothing here talks to the ledger directly, and nothing here can produce a
+ * malformed ledger row — the trigger decides every ledger field.
+ *
+ * 🚨 `transaction_id` and `ledger_error` are deliberately NOT written. They
+ * are the trigger's to set, and sending them would write nulls over its
+ * answer on the way up.
+ *
+ * 🚨 `user_id` is never sent: it defaults to auth.uid() server-side.
+ */
+export async function insertShopCompletion(
+  householdId: string,
+  draft: ShopCompletionDraft,
+): Promise<string> {
+  const id = newId()
+  await powerSyncDb.execute(
+    `INSERT INTO lst_shop_completions
+       (id, household_id, list_id, list_name, completed_at, amount, spend_date,
+        category_id, payment_method, location, owner_id, pot_id, items_snapshot)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'card', ?, ?, ?, ?)`,
+    [
+      id,
+      householdId,
+      toDbId(draft.listId),
+      draft.listName,
+      new Date().toISOString(),
+      draft.amount,
+      toDbId(draft.spendDate),
+      toDbId(draft.categoryId),
+      draft.location.location,
+      // A joint shop stores NO owner. Verified 2026-09-20: the ledger never
+      // reads ownerId on a joint-located expense (§8.2c).
+      toDbId(draft.location.location === 'joint' ? '' : draft.location.ownerId),
+      toDbId(draft.location.location === 'pot' ? draft.location.potId : ''),
+      // Kept in Listly only. Adam, 2026-09-20: "only amount needs to be
+      // recorded to shared-ledger-finance, but would be handy to have that
+      // information in listly's tables". The trigger never reads it.
+      toDbId(draft.itemsSnapshot),
+    ],
+  )
+  return id
+}
+
+/**
+ * "Couldn't add to the ledger — tap to retry."
+ *
+ * 🚨 Re-writing `amount` is the retry. The trigger fires on
+ * `UPDATE OF amount`, and PowerSync sends a PATCH of the changed columns, so
+ * `set amount = amount` puts `amount` in the statement's SET list and the
+ * trigger runs again — whether or not the value differs.
+ *
+ * `ledger_error` is cleared locally at the same time so the banner goes as
+ * soon as it is tapped. The server's own answer overwrites it either way
+ * moments later: on success `ledger_error` comes back null, and on a repeat
+ * failure it comes back with the new message.
+ */
+export async function retryLedgerWrite(id: string): Promise<void> {
+  await powerSyncDb.execute(
+    'UPDATE lst_shop_completions SET amount = amount, ledger_error = NULL WHERE id = ?',
+    [id],
+  )
 }
 
 // ── jobs ────────────────────────────────────────────────────────────────────

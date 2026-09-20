@@ -1,12 +1,15 @@
 import { useState } from 'react'
-import { useListly } from '../context/ListlyContext'
+import { useListly, type ShopSnapshot } from '../context/ListlyContext'
 import { ShoppingList } from '../components/ShoppingList'
 import { ItemEditSheet } from '../components/ItemEditSheet'
 import { ManageListsSheet } from '../components/ManageListsSheet'
+import { FinishShopSheet } from '../components/FinishShopSheet'
+import { LedgerErrors } from '../components/LedgerErrors'
 import { Sliders } from '../components/Icons'
 
 export function Shopping() {
   const { visibleLists, addList } = useListly()
+  const [pricing, setPricing] = useState<ShopSnapshot | null>(null)
   const [draft, setDraft] = useState('')
   const [manageOpen, setManageOpen] = useState(false)
   const [editing, setEditing] = useState<{ listId: string; itemId: string } | null>(null)
@@ -40,11 +43,17 @@ export function Shopping() {
         </button>
       </div>
 
+      {/* 🚨 A shop that never reached the ledger says so, here, at the top
+          of the page. A silent failure is exactly the class of bug this
+          workstream keeps paying for. */}
+      <LedgerErrors />
+
       {visibleLists.map((list) => (
         <ShoppingList
           key={list.id}
           list={list}
           onEditItem={(itemId) => setEditing({ listId: list.id, itemId })}
+          onPriceShop={setPricing}
         />
       ))}
 
@@ -76,6 +85,7 @@ export function Shopping() {
       )}
 
       {manageOpen && <ManageListsSheet onClose={() => setManageOpen(false)} />}
+      {pricing && <FinishShopSheet shop={pricing} onClose={() => setPricing(null)} />}
       {editing && (
         <ItemEditSheet
           listId={editing.listId}

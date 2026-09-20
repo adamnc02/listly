@@ -57,8 +57,12 @@ if (process.argv.includes('--columns')) {
   // column the app writes that Postgres does not have is not a discard —
   // an unknown-column error is not fatal to the connector, so it retries
   // forever and blocks that device's whole upload queue).
+  //
+  // Keyed '<schema>.<table>', because Listly's list spans TWO schemas —
+  // unlike the ledger's, which is all one. The checker needs to know which
+  // schema to look each table up in.
   const out: Record<string, string[]> = {}
-  for (const spec of SYNCED_TABLES) out[spec.remote] = Object.keys(spec.columns)
+  for (const spec of SYNCED_TABLES) out[`${spec.schema}.${spec.remote}`] = Object.keys(spec.columns)
   console.log(JSON.stringify(out, null, 2))
 } else {
   console.log(block(OWN_STREAM, OWN_TABLES))

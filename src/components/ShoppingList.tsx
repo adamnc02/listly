@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { List } from '../types'
-import { useListly } from '../context/ListlyContext'
+import { useListly, type ShopSnapshot } from '../context/ListlyContext'
 import { useDragReorder } from '../lib/useDragReorder'
 import { Chevron, Grip, Plus, StarFilled, Tick, TickSmall } from './Icons'
 
@@ -11,8 +11,18 @@ import { Chevron, Grip, Plus, StarFilled, Tick, TickSmall } from './Icons'
  * all worded exactly as the prototype words them — they are the design, not
  * placeholder copy.
  */
-export function ShoppingList({ list, onEditItem }: { list: List; onEditItem: (itemId: string) => void }) {
-  const { device, setListOpen, addItem, toggleItem, reorderItems, finishShop } = useListly()
+export function ShoppingList({
+  list,
+  onEditItem,
+  onPriceShop,
+}: {
+  list: List
+  onEditItem: (itemId: string) => void
+  /** Called with the finished shop only when the D4 gate is open. */
+  onPriceShop: (shop: ShopSnapshot) => void
+}) {
+  const { device, setListOpen, addItem, toggleItem, reorderItems, finishShop, ledgerGateOpen } =
+    useListly()
   const [draft, setDraft] = useState('')
   const [addHint, setAddHint] = useState<string | null>(null)
 
@@ -149,7 +159,17 @@ export function ShoppingList({ list, onEditItem }: { list: List; onEditItem: (it
           {list.items.length > 0 && (
             <div className="finish">
               <div className="hint">{hint}</div>
-              <button className="btn outline" onClick={() => finishShop(list.id)}>
+              {/* 🚨 With no ledger this does exactly what it always did:
+                  clear the ticked items and collapse. No price sheet, no
+                  mention of the ledger, nothing to explain. */}
+              <button
+                className="btn outline"
+                onClick={() => {
+                  void finishShop(list.id).then((shop) => {
+                    if (ledgerGateOpen) onPriceShop(shop)
+                  })
+                }}
+              >
                 <TickSmall />
                 Finish shop
               </button>
