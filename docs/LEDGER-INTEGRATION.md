@@ -10,9 +10,9 @@ ledger changes a blast radius they would not otherwise have.
 **Nothing in Postgres or PowerSync will warn you when a change here breaks Listly.** Every failure
 in the table below is silent.
 
-**State:** Phases 1–3 complete (2026-09-20). Listly reads the ledger and depends on its functions.
-The **write** path — a finished shop becoming a transaction — is Phase 4 and does not exist yet; it
-is described at the end so the shape is known in advance.
+**State:** Phases 1–4 complete (2026-09-20). Listly reads the ledger, depends on its functions, and
+**writes into `shared_finance_ledger.transactions`** — live since migrations `20260920160000` and
+`20260920160200`. The write path is described at the end.
 
 ---
 
@@ -33,7 +33,7 @@ Every row is something a change on the ledger side could break with no error any
 | `people` (+ `linked_user_id`) | Read-only via `lst_ref_people`. The D4 gate counts it; the owner picker names it | Rename → the gate misreads and the ledger step vanishes or appears wrongly |
 | `categories` (+ the `@<household_id>` suffix) | Read via `lst_ref_categories`; the id is passed through **verbatim** | Changing the suffix convention → Listly writes transactions with unresolvable categories |
 | `pots`, `savings_pots`, `joint_account` | Read for the location picker. The **absence** of a `joint_account` row is meaningful | Rename → pickers empty, no error |
-| `transactions` | 🚨 **Phase 4 gives this table a SECOND WRITER** | A new CHECK value or a dropped column → the shop is not booked |
+| `transactions` | 🚨 **This table has a SECOND WRITER.** Listly's trigger inserts into it | A new CHECK value or a dropped column → `23514`/`42703`, caught by the trigger and shown as `ledger_error`, but the shop is not booked |
 | `powersync` publication, `powersync_role` | Shared by four apps | A second one → breaks everything (§6) |
 | Sync Stream output names | `lst_*` / `lst_ref_*` must not collide with `sfl_*` or personal-f's bare names | A collision merges two apps' rows into one local table, silently (§32) |
 | Exposed schemas | `listly` must stay listed | Removing it → every Listly `.rpc()`/`.from()` fails while sync looks perfectly healthy (§20) |
@@ -69,20 +69,82 @@ the function.** Not made unilaterally because the ledger uses it too. Tracked in
 - **Never writes any `lst_ref_*` table.** The connector refuses the upload and says so loudly.
 - **Never creates a second household, link code or linking model.**
 
-## The write path (Phase 4, not yet built)
+## The write path
+
+**Live since `20260920160000_listly_ledger_bridge` (+ `20260920160200` for the retry).**
 
 One row, one way. Listly writes `listly.shop_completions` in its own schema; a `security definer`
 trigger writes the `shared_finance_ledger.transactions` row server-side. That works offline and
 makes a malformed ledger row impossible from a client. The `shop_completions.id` **becomes** the
 `transactions.id`, so it is idempotent and traceable both ways.
 
-Field mapping is `PROMPT-01-listly-foundations.md` §8.3. Two constraints on whoever builds it:
+```
+listly.write_ledger_transaction()
+  BEFORE INSERT OR UPDATE OF amount, ledger_error ON listly.shop_completions
+  security definer · set search_path = '' · fully qualified throughout
+```
 
-- 🚨 **the trigger must never `raise`** — a raising trigger blocks that device's *entire* upload
-  queue, not just that row (§29), so a stale category id would stop the shopping list syncing.
-  Record `ledger_error` and return.
-- 🚨 **never `current_date`** — it is UTC on this project, so a shop finished at 00:30 BST books as
-  `pending` instead of `cleared`. Use `(now() at time zone 'Europe/London')::date`.
+`BEFORE`, so `transaction_id` and `ledger_error` are set in the same write — an `AFTER` trigger
+would need a second UPDATE, which is itself an upload.
+
+### The exact field mapping
+
+| `transactions` column | Value |
+|---|---|
+| `id` | `new.id` — the same id as the completion row |
+| `household_id` | `new.household_id` |
+| `user_id` | `coalesce(new.user_id, auth.uid())` |
+| `date` | `coalesce(new.spend_date, London today)` |
+| `amount` | `new.amount`. **A null amount books nothing** — an unpriced shop is a legitimate outcome |
+| `direction` | always `'out'` |
+| `type` | always `'expense'` |
+| `payment_method` | `coalesce(new.payment_method, 'card')` |
+| `category_id` | `new.category_id`, **verbatim, `@<household_id>` suffix intact**. Null is refused with a `ledger_error`, because the column is NOT NULL |
+| `status` | `'cleared'` if `date <= London today`, else `'pending'` |
+| `note` | `new.list_name` — the list name alone, "Tesco", not "Tesco shop" |
+| `location` | `coalesce(new.location, 'joint')`. Never `'savings'` |
+| `owner_id` | `new.owner_id`, **null when `location = 'joint'`** |
+| `pot_id` | only when `location = 'pot'`. `savings_pot_id` always null |
+| `person_id`, `position`, everything else | `null` |
+
+Before inserting it checks household membership. RLS already enforces that on `shop_completions`;
+a `security definer` function bypasses RLS, so the rule is restated on the way **into** another
+app's table rather than assumed.
+
+`on conflict (id) do nothing`, so a resent upload writes once.
+
+### The two rules it obeys, and why
+
+- 🚨 **It never `raise`s.** A raising trigger blocks that device's *entire* upload queue, not just
+  that row (§29) — a stale category id would stop the shopping list syncing. Every failure path
+  records `ledger_error` and returns. Checks 6 and 12 of
+  `silver-octo-invention/supabase/checks/20260920_listly_ledger_bridge_verify.sql` assert this from
+  `pg_proc`, and `behaviour-listly-bridge.mjs` makes the write fail three ways and asserts the
+  completion row still lands.
+- 🚨 **It never uses `current_date`** — UTC on this project, so a shop finished at 00:30 BST would
+  book as `pending` instead of `cleared`. Everything compares against
+  `(now() at time zone 'Europe/London')::date`.
+
+### Edits and deletes are out of scope
+
+Once a shop is booked it is edited **in the ledger app**. Listly is not a second editor for the same
+row — that is a merge problem nobody asked for. Changing the amount in Listly does **not** rewrite
+the ledger row, and there is a test asserting that so nobody "fixes" it later.
+
+The one exception is the retry. When the ledger write fails, the completion row carries
+`ledger_error` and Listly shows "Couldn't add to the ledger — tap to retry".
+
+🚨 **That retry is why the trigger also listens to `ledger_error`.** The app clears that column and
+re-writes `amount` to the value it already holds — but PowerSync PATCHes only the columns that
+*genuinely changed*, so what reaches Postgres is `set ledger_error = null` and nothing else. A
+trigger scoped to `amount` alone would never fire, and Retry would clear the warning while booking
+nothing. Nothing else ever writes that column.
+
+### What is kept in Listly and never sent
+
+`shop_completions.items_snapshot` — a newline-separated snapshot of the ticked item names. **The
+trigger never reads it**, so no item detail can reach `shared_finance_ledger` (Adam, 2026-09-20:
+*"only amount needs to be recorded"*).
 
 Rows Listly creates are ordinary `type: 'expense'` rows needing no special handling — but **any
-assumption that the ledger app created every row in `transactions` is wrong from Phase 4 onward.**
+assumption that the ledger app created every row in `transactions` is now wrong.**
