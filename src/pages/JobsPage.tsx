@@ -76,7 +76,7 @@ export function JobsPage({ page }: { page: JobPage }) {
             Add
           </button>
         </div>
-        {hint && (
+        {hint && !text.trim() && (
           <p className="help" style={{ color: 'var(--red)', margin: 0 }} role="alert">
             {hint}
           </p>

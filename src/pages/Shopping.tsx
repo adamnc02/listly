@@ -8,7 +8,7 @@ import { LedgerErrors } from '../components/LedgerErrors'
 import { Sliders } from '../components/Icons'
 
 export function Shopping() {
-  const { visibleLists, addList } = useListly()
+  const { visibleLists, addList, finishShop } = useListly()
   const [pricing, setPricing] = useState<ShopSnapshot | null>(null)
   const [draft, setDraft] = useState('')
   const [manageOpen, setManageOpen] = useState(false)
@@ -78,14 +78,26 @@ export function Shopping() {
         </button>
       </div>
 
-      {hint && (
+      {hint && !draft.trim() && (
         <p className="help" style={{ color: 'var(--red)', padding: '0 6px' }} role="alert">
           {hint}
         </p>
       )}
 
       {manageOpen && <ManageListsSheet onClose={() => setManageOpen(false)} />}
-      {pricing && <FinishShopSheet shop={pricing} onClose={() => setPricing(null)} />}
+      {pricing && (
+        <FinishShopSheet
+          shop={pricing}
+          // 🚨 Cancel changes NOTHING — the ticked items were never deleted.
+          onCancel={() => setPricing(null)}
+          // Saved, or explicitly finished without pricing: only now do the
+          // ticked items go and the list collapse.
+          onComplete={() => {
+            void finishShop(pricing.listId)
+            setPricing(null)
+          }}
+        />
+      )}
       {editing && (
         <ItemEditSheet
           listId={editing.listId}

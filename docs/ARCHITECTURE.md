@@ -177,10 +177,29 @@ instead of scrolled.
 
 One row, one way, and it is worth understanding before touching either side.
 
-Finishing a shop clears the ticked items and collapses the list — the same thing it has always
-done. Then, **only if the D4 gate is open**, a stepped sheet asks three things (amount, date,
-location) and writes one row to `listly.shop_completions`. A trigger on that table, inside the
-database, writes the `shared_finance_ledger.transactions` row.
+With **no ledger**, finishing a shop clears the ticked items and collapses the list — the same thing
+it has always done.
+
+With a ledger, Finish shop **changes nothing yet**. It opens a stepped sheet asking three things
+(amount, date, location), and there are three ways out:
+
+| | Ticked items | Ledger row |
+|---|---|---|
+| **Save** | cleared, list collapses | written |
+| **"Don't price it"** | cleared, list collapses | none |
+| **Cancel** (swipe, scrim, Escape) | **untouched** | none |
+
+🚨 **Cancel is not an undo, and that is deliberate.** Nothing is deleted until the outcome is known,
+so cancelling is the *absence* of an action. Implementing it as "delete on open, restore on cancel"
+would have meant re-inserting the items — which mints new ids and breaks invariant 1 (an item's
+identity must stay stable or two devices never converge on it), and would have to survive the app
+being killed mid-sheet. Deferring costs nothing and cannot fail.
+
+That is why the context exposes `snapshotShop()` (read-only) separately from `finishShop()` (the
+destructive part). A caller that opens the sheet must use the first.
+
+Once the outcome is known, one row goes to `listly.shop_completions`. A trigger on that table,
+inside the database, writes the `shared_finance_ledger.transactions` row.
 
 **Why server-side rather than a second client write:** it works offline, it cannot produce a
 malformed ledger row from a client, and it needs no second round trip. The app writes to its own
