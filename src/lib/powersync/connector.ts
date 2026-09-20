@@ -67,15 +67,42 @@ export function readRejectedWrites(): RejectedWrite[] {
 }
 
 export class SupabaseConnector implements PowerSyncBackendConnector {
+  /**
+   * 🚨 If this returns null, or throws, PowerSync sends the request WITHOUT
+   * a token and the service answers `401 PSYNC_S2106 Authentication
+   * required` — which is what the instance logged on 2026-09-20 while the
+   * app showed `connected=false connecting=false`. The 401 is the symptom;
+   * the cause is always here. So it says what it did, every time, rather
+   * than failing mutely.
+   */
   async fetchCredentials() {
     const {
       data: { session },
       error,
     } = await supabase.auth.getSession()
-    if (error || !session) {
-      throw new Error(`Could not fetch Supabase credentials: ${error?.message ?? 'no session'}`)
+
+    if (error) {
+      console.error('[powersync] fetchCredentials: getSession failed —', error)
+      throw new Error(`Could not fetch Supabase credentials: ${error.message}`)
     }
-    return { endpoint: POWERSYNC_URL, token: session.access_token }
+    if (!session) {
+      console.error(
+        '[powersync] fetchCredentials: NO SESSION. PowerSync will send an unauthenticated ' +
+          'request and the service will answer 401 PSYNC_S2106.',
+      )
+      throw new Error('Could not fetch Supabase credentials: no session')
+    }
+    if (!session.access_token) {
+      console.error('[powersync] fetchCredentials: session has no access_token', session)
+      throw new Error('Could not fetch Supabase credentials: session has no access_token')
+    }
+
+    const expiresAt = session.expires_at ? new Date(session.expires_at * 1000) : undefined
+    console.info(
+      `[powersync] fetchCredentials: ok. endpoint=${POWERSYNC_URL} ` +
+        `token=${session.access_token.length} chars, expires ${expiresAt?.toLocaleTimeString('en-GB') ?? 'unknown'}`,
+    )
+    return { endpoint: POWERSYNC_URL, token: session.access_token, expiresAt }
   }
 
   async uploadData(database: AbstractPowerSyncDatabase): Promise<void> {
