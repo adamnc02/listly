@@ -1,0 +1,452 @@
+/* ===========================================================================
+   Listly design system.
+
+   Every token below is LISTLY-DESIGN.md §5, which is the authority. The
+   prototype (listly-prototype.html) is the same values inline; this file is
+   that stylesheet restructured for the real build, with the additions the
+   prototype could not have:
+
+     - the JS-measured --app-height / --safe-top / --safe-bottom from
+       index.html, preferred over bare 100dvh/env();
+     - .sheet-root, because sheets now render through a portal to
+       document.body rather than inside the scrolling <main>
+       (MIGRATION-LESSONS §15);
+     - touch-drag states (.row.dragging / .row.shifted), which the
+       prototype's desktop-only HTML5 drag did not need.
+
+   Listly has no dark mode. The palette is taken from the logo and the app is
+   one cream surface by design, so there is no second theme to define.
+   =========================================================================== */
+
+:root {
+  /* Colours — LISTLY-DESIGN.md §5 */
+  --ground: #F5EFE6;
+  --paper: #FFFCF7;
+  --ink: #3B2F26;
+  --muted: #7A6A5C;
+  --soft: #5E4F43;
+  --brown: #8A5E34;
+  --brown-2: #7A5430;
+  --sage: #6F8C5E;
+  --sage-light: #A9BB9C;
+  --sage-wash: #EDF2E6;
+  --line: #E6DCCD;
+  --line-2: #D9CBB8;
+  --red: #B3362C;
+
+  --chip-bg: #F1E6D7;
+  --chip-soon-bg: #FBE6E3;
+  --chip-soon-ink: #9E2A21;
+  --done-card: #EFE7DB;
+  --done-item: #8C7C6E;
+  --done-job: #7E6E60;
+  --pill-ink: #5C7A4C;
+  --grip: #C9B9A6;
+  --bell-off: #B5A594;
+
+  /* Fallbacks only. index.html overwrites these with measured pixels on
+     first paint; see its comment for why the CSS values cannot be trusted
+     on iOS standalone. */
+  --app-height: 100dvh;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: #E9E1D5;
+}
+
+body {
+  font-family: 'Caveat', cursive;
+  color: var(--ink);
+  display: flex;
+  justify-content: center;
+  /* Handwriting fonts render light; this keeps the strokes honest on the
+     high-DPI phone screens this app is built for. */
+  -webkit-font-smoothing: antialiased;
+}
+
+button, input { font-family: inherit; color: inherit; }
+button { cursor: pointer; }
+
+/* Every tap target in the app is >= 44px (LISTLY-DESIGN.md §5), so the
+   300ms tap highlight is pure noise. */
+button, .row, .listhead { -webkit-tap-highlight-color: transparent; }
+
+.app {
+  width: 100%;
+  max-width: 430px;
+  height: var(--app-height);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: var(--ground);
+}
+
+/* ---------- header ---------- */
+header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: calc(18px + var(--safe-top)) 20px 10px;
+  flex-shrink: 0;
+}
+header img {
+  width: 46px;
+  height: 46px;
+  border-radius: 13px;
+  object-fit: cover;
+  box-shadow: 0 1px 3px rgba(59, 47, 38, .15);
+}
+.brand { font-size: 36px; font-weight: 700; line-height: 1; }
+.today { font-size: 18px; color: var(--muted); }
+
+/* ---------- due-soon banner ---------- */
+.alert {
+  margin: 4px 16px 6px;
+  padding: 14px 10px 14px 16px;
+  background: var(--red);
+  color: #fff;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(179, 54, 44, .28);
+}
+.alert .t { font-size: 26px; font-weight: 700; line-height: 1.05; }
+.alert .w { font-size: 20px; opacity: .95; }
+.alert .icon-btn { background: rgba(255, 255, 255, .18); color: #fff; }
+
+/* ---------- shared bits ---------- */
+.grow { flex: 1; min-width: 0; }
+.icon-btn {
+  width: 44px; height: 44px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 22px;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0;
+  background: transparent;
+}
+main {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px 16px 24px;
+  -webkit-overflow-scrolling: touch;
+}
+.stack { display: flex; flex-direction: column; gap: 14px; }
+.pagehead {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px;
+  padding: 0 4px;
+}
+.pagehead h1 { margin: 0; font-size: 34px; color: var(--brown); }
+.pagehead span { font-size: 20px; color: var(--muted); }
+.manage-btn {
+  height: 40px;
+  padding: 0 14px;
+  border-radius: 20px;
+  border: 2px solid var(--line-2);
+  background: var(--paper);
+  color: var(--brown-2);
+  font-size: 20px;
+  font-weight: 700;
+  display: flex; align-items: center; gap: 6px;
+}
+.card {
+  background: var(--paper);
+  border: 1.5px solid var(--line);
+  border-radius: 18px;
+  overflow: hidden;
+}
+
+/* ---------- shopping lists ---------- */
+.listhead {
+  width: 100%;
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 16px;
+  min-height: 60px;
+  background: transparent;
+  border: none;
+  text-align: left;
+}
+.listhead .name { font-size: 30px; font-weight: 700; line-height: 1.1; }
+.pill {
+  font-size: 20px;
+  color: var(--pill-ink);
+  background: var(--sage-wash);
+  padding: 2px 12px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.defmark { color: var(--brown); display: flex; }
+.chev { transition: transform .2s; flex-shrink: 0; }
+.open > .listhead .chev,
+.open > .donehead .chev { transform: rotate(90deg); }
+.listbody {
+  border-top: 1.5px dashed var(--line);
+  padding: 6px 8px 12px;
+  display: flex; flex-direction: column;
+}
+.row {
+  display: flex; align-items: center; gap: 2px;
+  min-height: 48px;
+  border-radius: 12px;
+  background: var(--paper);
+}
+.grip {
+  width: 22px;
+  display: flex; justify-content: center;
+  color: var(--grip);
+  flex-shrink: 0;
+  /* The pointer-drag handler owns this gesture end to end, so the browser
+     must not also scroll or text-select from it. */
+  touch-action: none;
+  cursor: grab;
+}
+
+/* Touch drag (Phase 1 §12): long-press the grip, then drag. The lifted row
+   follows the finger; its neighbours slide to show where it will land. */
+.row.dragging {
+  position: relative;
+  z-index: 2;
+  box-shadow: 0 6px 18px rgba(59, 47, 38, .22);
+  background: var(--paper);
+}
+.row.dragging .grip { cursor: grabbing; }
+.row.shifted { transition: transform .16s ease; }
+.rows-dragging { touch-action: none; user-select: none; -webkit-user-select: none; }
+
+.tick {
+  width: 44px; height: 44px;
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+.box {
+  width: 26px; height: 26px;
+  border-radius: 8px;
+  border: 2.4px solid var(--sage-light);
+  display: flex; align-items: center; justify-content: center;
+}
+.box.on { background: var(--sage); border-color: var(--sage); }
+.itemtext {
+  flex: 1;
+  min-height: 44px;
+  text-align: left;
+  background: transparent;
+  border: none;
+  font-size: 26px;
+  line-height: 1.1;
+  padding: 4px 8px 4px 4px;
+}
+.itemtext.done { color: var(--done-item); text-decoration: line-through; }
+.empty-note { font-size: 21px; color: var(--muted); padding: 8px 8px 0; }
+.addrow { display: flex; align-items: center; gap: 8px; padding: 8px 4px 4px 8px; }
+.line-input {
+  flex: 1; min-width: 0;
+  height: 44px;
+  border: none;
+  border-bottom: 2px solid var(--line-2);
+  background: transparent;
+  font-size: 24px;
+  padding: 0 4px;
+  outline: none;
+}
+.round-add { background: var(--sage); color: #fff; }
+.finish { display: flex; align-items: center; gap: 10px; padding: 12px 4px 0 8px; }
+.finish .hint { flex: 1; font-size: 19px; line-height: 1.15; color: var(--muted); }
+
+/* ---------- buttons ---------- */
+.btn {
+  height: 44px;
+  padding: 0 18px;
+  border-radius: 22px;
+  border: none;
+  font-size: 22px;
+  font-weight: 700;
+  flex-shrink: 0;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.btn.outline { border: 2px solid var(--brown); background: var(--paper); color: var(--brown); }
+.btn.brown { background: var(--brown); color: #fff; }
+.btn.sage { background: var(--sage); color: #fff; }
+.btn.ghost { border: 2px solid var(--line-2); background: transparent; color: var(--soft); font-weight: 400; }
+.btn.danger { background: transparent; color: var(--red); padding: 0 12px; }
+
+.newlist {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px;
+  border: 2px dashed var(--line-2);
+  border-radius: 18px;
+}
+.newlist input {
+  flex: 1; min-width: 0;
+  height: 44px;
+  border: none;
+  background: transparent;
+  font-size: 26px;
+  padding: 0 4px;
+  outline: none;
+}
+.empty { text-align: center; padding: 24px 12px; font-size: 24px; color: var(--muted); }
+
+/* ---------- jobs ---------- */
+.jobform { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.jobform .line-input { width: 100%; font-size: 26px; }
+.due-lbl { display: flex; align-items: center; gap: 8px; flex: 1; font-size: 20px; color: var(--muted); }
+input[type=date] {
+  flex: 1; min-width: 0;
+  height: 40px;
+  border: 1.5px solid var(--line);
+  border-radius: 10px;
+  background: var(--ground);
+  font-size: 18px;
+  padding: 0 8px;
+}
+.jobs { padding: 6px 8px; display: flex; flex-direction: column; }
+.jobtext {
+  flex: 1;
+  min-height: 44px;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 4px 8px 4px 4px;
+}
+.jobtext .t { font-size: 26px; line-height: 1.1; }
+.chip { font-size: 18px; padding: 1px 10px; border-radius: 999px; background: var(--chip-bg); color: var(--brown-2); }
+.chip.soon { background: var(--chip-soon-bg); color: var(--chip-soon-ink); }
+.bell { color: var(--bell-off); }
+.bell[aria-pressed=true] { color: #fff; background: var(--sage); }
+.done-card { background: var(--done-card); }
+.donehead {
+  width: 100%;
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 16px;
+  min-height: 52px;
+  background: transparent;
+  border: none;
+  color: var(--soft);
+  text-align: left;
+}
+.donehead .name { font-size: 26px; font-weight: 700; flex: 1; }
+.donetext { font-size: 24px; color: var(--done-job); text-decoration: line-through; padding-left: 4px; }
+.done-card .row { background: transparent; }
+
+/* ---------- tab bar ---------- */
+nav {
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 8px 12px calc(14px + var(--safe-bottom));
+  background: var(--paper);
+  border-top: 1.5px solid var(--line);
+}
+nav button {
+  height: 62px;
+  border-radius: 16px;
+  border: none;
+  background: transparent;
+  color: var(--brown-2);
+  font-size: 21px;
+  font-weight: 700;
+  line-height: 1;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 3px;
+}
+nav button[aria-current=page] { background: var(--brown); color: #fff; }
+
+/* ---------- bottom sheets ---------- */
+/* Rendered through createPortal to document.body, never from inside <main>:
+   page components live in a scrolling, overflow-y:auto container, and an
+   overlay inside one gets clipped by it. MIGRATION-LESSONS §15 cost three
+   attempts to learn that, so this app starts with the portal. Because the
+   portal target is <body> and not .app, the scrim is `fixed` and re-imposes
+   the app's own 430px column so the sheet still lines up with the UI. */
+.sheet-root {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  display: flex;
+  justify-content: center;
+}
+.scrim {
+  width: 100%;
+  max-width: 430px;
+  background: rgba(59, 47, 38, .4);
+  display: flex; flex-direction: column; justify-content: flex-end;
+}
+.scrim .close-area { flex: 1; min-height: 60px; background: transparent; border: none; }
+.sheet {
+  background: var(--paper);
+  border-radius: 26px 26px 0 0;
+  padding: 12px 20px calc(24px + var(--safe-bottom));
+  display: flex; flex-direction: column; gap: 14px;
+  box-shadow: 0 -8px 24px rgba(59, 47, 38, .18);
+  max-height: 88%;
+  overflow-y: auto;
+}
+.handle { width: 44px; height: 5px; border-radius: 3px; background: var(--line-2); align-self: center; }
+.sheet h2 { margin: 0; font-size: 32px; color: var(--brown); }
+.sheet .field {
+  width: 100%;
+  height: 50px;
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  background: var(--ground);
+  font-size: 28px;
+  padding: 0 12px;
+}
+.sheet .sub { font-size: 20px; color: var(--muted); }
+.sheet .lbl { font-size: 22px; color: var(--soft); font-weight: 700; }
+.sheet .help { font-size: 20px; line-height: 1.2; color: var(--muted); margin: -6px 0 0; }
+.check { display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: 24px; color: var(--ink); }
+.check input { width: 24px; height: 24px; accent-color: var(--sage); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chips button {
+  height: 44px;
+  padding: 0 16px;
+  border-radius: 22px;
+  border: 2px solid var(--line-2);
+  background: var(--paper);
+  font-size: 22px;
+}
+.chips button[aria-pressed=true] { background: var(--sage); border-color: var(--sage); color: #fff; }
+.newname {
+  width: 100%;
+  height: 46px;
+  border: 2px dashed var(--line-2);
+  border-radius: 12px;
+  background: transparent;
+  font-size: 24px;
+  padding: 0 12px;
+}
+.actions { display: flex; align-items: center; gap: 10px; padding-top: 4px; }
+.mrow {
+  display: flex; align-items: center; gap: 6px;
+  min-height: 52px;
+  border-bottom: 1.5px dashed var(--line);
+}
+.mrow .nm { font-size: 26px; font-weight: 700; line-height: 1.1; }
+.mrow .st { font-size: 18px; color: var(--muted); }
+.star { color: var(--grip); }
+.star[aria-pressed=true] { color: var(--brown); }
+.del { color: var(--red); }
+
+/* Visually hidden, still read aloud. */
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+@media (prefers-reduced-motion: reduce) {
+  .chev, .row.shifted { transition: none; }
+}
