@@ -60,7 +60,11 @@ export function Shopping() {
           placeholder="New list, e.g. Tesco"
           aria-label="New list name"
         />
-        <button className="btn brown" onClick={submit} type="button">
+        <button
+          className={`btn brown${draft.trim() ? '' : ' waiting'}`}
+          onClick={submit}
+          type="button"
+        >
           Add list
         </button>
       </div>

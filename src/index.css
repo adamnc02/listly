@@ -318,6 +318,11 @@ main {
 }
 .btn.outline { border: 2px solid var(--brown); background: var(--paper); color: var(--brown); }
 .btn.brown { background: var(--brown); color: #fff; }
+/* An "add" button with nothing to add looks inert, so the empty field is
+   visible BEFORE the tap — but it stays clickable, so tapping it explains
+   itself rather than doing nothing. A control that is silently inert is
+   indistinguishable from a broken one (Adam, 2026-09-20). */
+.btn.waiting { opacity: .45; }
 .btn.sage { background: var(--sage); color: #fff; }
 .btn.ghost { border: 2px solid var(--line-2); background: transparent; color: var(--soft); font-weight: 400; }
 .btn.danger { background: transparent; color: var(--red); padding: 0 12px; }
