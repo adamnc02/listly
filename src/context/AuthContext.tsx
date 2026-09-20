@@ -34,6 +34,26 @@ interface AuthContextValue {
   signOut: () => Promise<void>
 }
 
+/**
+ * 🚨 Origin + path ONLY. Never `window.location.href`.
+ *
+ * Supabase returns the session in the URL **fragment**, so it appends
+ * `#access_token=…` to whatever redirect it is given. If the current URL
+ * already carries a fragment — which it does the moment ONE sign-in fails
+ * and leaves its tokens behind — you get `…/listly/##access_token=…`, and
+ * supabase-js's fragment parser reads the leading `#` as part of the first
+ * parameter name. `access_token` is then never found, no session is created,
+ * the tokens stay in the URL, and the NEXT attempt compounds it. One failure
+ * becomes permanent (Adam, 2026-09-20).
+ *
+ * Passing a clean target makes that impossible, and there is no case where
+ * Listly wants to return to a URL carrying a query or fragment: it has no
+ * router and exactly one entry point.
+ */
+function cleanRedirectTarget(): string {
+  return window.location.origin + window.location.pathname
+}
+
 const AuthContext = createContext<AuthContextValue | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -71,7 +91,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       sessionStorage.setItem(
         'listly:auth:attempt',
-        JSON.stringify({ at: new Date().toISOString(), redirectTo: window.location.href }),
+        JSON.stringify({ at: new Date().toISOString(), redirectTo: cleanRedirectTarget() }),
       )
     } catch {
       // Private mode. The console warning below is still there.
@@ -86,7 +106,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // This URL must also be in Supabase's Authentication → URL
       // Configuration → Redirect URLs allow-list, INCLUDING the localhost
       // dev URL, or the same silent fallback happens while testing.
-      options: { redirectTo: window.location.href },
+      options: { redirectTo: cleanRedirectTarget() },
     })
     if (error) {
       console.error('[auth] signInWithOAuth refused:', error)
@@ -109,7 +129,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
-        options: { emailRedirectTo: window.location.href },
+        options: { emailRedirectTo: cleanRedirectTarget() },
       })
       if (error) throw error
       if (!data.session) {
@@ -126,7 +146,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const sendPasswordReset = async (email: string) => {
     if (!email) throw new Error('Enter your email above first.')
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: window.location.href,
+      redirectTo: cleanRedirectTarget(),
     })
     if (error) throw error
   }

@@ -74,6 +74,17 @@ export function AuthGate() {
     const params = new URLSearchParams(
       window.location.hash.startsWith('#') ? window.location.hash.slice(1) : window.location.search,
     )
+    // 🚨 If a token fragment is sitting here, supabase-js has already had its
+    // chance to consume it (detectSessionInUrl runs when the client is
+    // created, before this component mounts). Still being on the sign-in
+    // screen means it did not take. Clear it: left in place it becomes the
+    // next redirectTo, producing `##access_token=` — a double hash that
+    // breaks the fragment parser permanently — and it is a live credential
+    // sitting in the address bar and in history.
+    if (window.location.hash.includes('access_token')) {
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+
     const oauthError = params.get('error_description') ?? params.get('error')
     if (oauthError) {
       setError(`Sign-in was refused: ${oauthError}`)
@@ -86,12 +97,18 @@ export function AuthGate() {
       const raw = sessionStorage.getItem('listly:auth:attempt')
       if (!raw) return
       sessionStorage.removeItem('listly:auth:attempt')
-      const attempt = JSON.parse(raw) as { at: string; redirectTo: string }
+      JSON.parse(raw)
       // Back on the sign-in screen after an attempt = no session was created.
+      //
+      // 🚨 Deliberately does NOT print the URL. A failed OAuth return leaves
+      // a live access_token AND refresh_token in the fragment, and this
+      // message is the kind of thing people screenshot and paste into a chat
+      // — which is exactly what happened on 2026-09-20. Say what to check,
+      // never the credential.
       setError(
-        `Sign-in came back without creating a session. The redirect requested was ${attempt.redirectTo} — ` +
-          'that exact URL has to be in Supabase → Authentication → URL Configuration → Redirect URLs, ' +
-          'and this project\u2019s callback has to be in the Google Cloud OAuth client\u2019s Authorized redirect URIs.',
+        'Sign-in came back without creating a session. Check that this app\u2019s address — ' +
+          'origin and path, e.g. http://localhost:5173/listly/** — is in Supabase \u2192 ' +
+          'Authentication \u2192 URL Configuration \u2192 Redirect URLs.',
       )
     } catch {
       // Private mode, or unparseable. Nothing to report.
