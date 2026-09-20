@@ -486,6 +486,13 @@ nav button[aria-current=page] { background: var(--brown); color: #fff; }
   max-height: 88%;
   overflow-y: auto;
 }
+/* 🚨 The sheet is a flex column with a max-height, so its children are
+   shrinkable by default — and when the content is taller than the sheet they
+   get SQUASHED rather than scrolled, which is why the "What to do" box
+   rendered as a sliver with its heading cut in half (Adam, 2026-09-20).
+   Children keep their natural height and the sheet scrolls, which is what
+   `overflow-y: auto` was always meant to do. */
+.sheet > * { flex-shrink: 0; }
 .handle { width: 44px; height: 5px; border-radius: 3px; background: var(--line-2); align-self: center; }
 .sheet h2 { margin: 0; font-size: 32px; color: var(--brown); }
 .sheet .field {

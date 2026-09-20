@@ -157,17 +157,36 @@ export function SyncRoot({ children }: { children: ReactNode }) {
       setStatus({ kind: 'ready' })
 
       try {
-        // 3 & 4. Connect, then subscribe explicitly.
-        recordBootStep('connect() called', true, 'includeDefaultStreams: false')
-        await powerSyncDb.connect(powerSyncConnector, { includeDefaultStreams: false })
-        if (cancelled) { recordBootStep('cancelled after connect', false); return }
-        recordBootStep('connect() returned', true)
-
+        // 3 & 4. SUBSCRIBE FIRST, THEN CONNECT.
+        //
+        // 🚨 This order is not cosmetic, and getting it wrong cost an
+        // evening. `connect()` with `includeDefaultStreams: false` and NO
+        // subscriptions gives PowerSync nothing to sync, so the connection
+        // never completes — and `await connect()` then never resolves. It
+        // does not throw, it does not time out, and SyncStatus reports
+        // "not connected, no error", because from its point of view nothing
+        // was ever asked for. The startup log showed `connect() called` with
+        // no matching `connect() returned`, which is what finally located it.
+        //
+        // PROMPT-01 §9.3 shows connect-then-subscribe; that ordering is
+        // wrong for a client with no auto-subscribed streams.
         await powerSyncDb.syncStream(LISTLY_STREAM).subscribe()
         recordBootStep(`subscribed to ${LISTLY_STREAM}`, true)
         await powerSyncDb.syncStream(LISTLY_REF_STREAM).subscribe()
         recordBootStep(`subscribed to ${LISTLY_REF_STREAM}`, true)
         if (cancelled) return
+
+        // Belt and braces: never await this indefinitely again. If it has
+        // not settled in 30s something is wrong, and a visible message beats
+        // a spinner that lasts forever.
+        recordBootStep('connect() called', true, 'includeDefaultStreams: false')
+        await withTimeout(
+          powerSyncDb.connect(powerSyncConnector, { includeDefaultStreams: false }),
+          30000,
+          'Connecting to the sync service',
+        )
+        if (cancelled) { recordBootStep('cancelled after connect', false); return }
+        recordBootStep('connect() returned', true)
       } catch (e) {
         if (cancelled) return
         const msg = e instanceof Error ? e.message : String(e)
