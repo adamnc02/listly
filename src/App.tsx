@@ -7,6 +7,8 @@ import { DueSoonBanners } from './components/DueSoonBanners'
 import { BottomNav } from './components/BottomNav'
 import { Shopping } from './pages/Shopping'
 import { JobsPage } from './pages/JobsPage'
+import { AccountModal } from './components/AccountModal'
+import { Me } from './components/Icons'
 import { todayLong } from './lib/jobs'
 import icon from '/apple-touch-icon.png'
 
@@ -26,15 +28,24 @@ export type Tab = 'shopping' | 'house' | 'mine'
  */
 function Shell() {
   const [tab, setTab] = useState<Tab>('shopping')
+  const [accountOpen, setAccountOpen] = useState(false)
 
   return (
     <div className="app">
       <header>
         <img src={icon} alt="" />
-        <div>
+        <div className="grow">
           <div className="brand">Listly</div>
           <div className="today">{todayLong()}</div>
         </div>
+        <button
+          className="icon-btn"
+          style={{ color: 'var(--brown-2)' }}
+          onClick={() => setAccountOpen(true)}
+          aria-label="Account and household"
+        >
+          <Me />
+        </button>
       </header>
 
       <DueSoonBanners />
@@ -46,6 +57,8 @@ function Shell() {
       </main>
 
       <BottomNav tab={tab} onChange={setTab} />
+
+      {accountOpen && <AccountModal onClose={() => setAccountOpen(false)} />}
     </div>
   )
 }
