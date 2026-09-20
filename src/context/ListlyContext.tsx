@@ -67,12 +67,18 @@ interface ListlyValue {
   deleteItem: (listId: string, itemId: string) => void
   reorderItems: (listId: string, fromIndex: number, toIndex: number) => void
   /**
-   * Clears the ticked items and collapses the list — exactly what it did
-   * before Phase 4 — and returns a snapshot of what was ticked so the caller
-   * can open the price sheet. The snapshot is taken FIRST, because the rows
-   * it describes are about to be deleted.
+   * What was ticked, WITHOUT changing anything. Read before the price sheet
+   * opens, so the sheet can be cancelled and leave the list untouched.
    */
-  finishShop: (listId: string) => Promise<ShopSnapshot>
+  snapshotShop: (listId: string) => Promise<ShopSnapshot>
+  /**
+   * The actual completion: clears the ticked items and collapses the list.
+   *
+   * 🚨 Called only once the outcome is known — after Save, or after "Don't
+   * price it". NOT when the price sheet is cancelled. See the note on
+   * snapshotShop's caller.
+   */
+  finishShop: (listId: string) => Promise<void>
 
   // ── the ledger bridge (Phase 4) ──────────────────────────────────────────
   /**
@@ -259,14 +265,24 @@ export function ListlyProvider({ children }: { children: ReactNode }) {
     [lists],
   )
 
-  const finishShop = useCallback(
+  /**
+   * 🚨 READ-ONLY. Nothing is deleted here, and that is the point.
+   *
+   * Cancelling the price sheet must leave the list EXACTLY as it was, same
+   * items ticked and unticked (Adam, 2026-09-20). The obvious way to get
+   * that — delete on Finish shop, put them back on cancel — is not
+   * available: re-inserting would mint NEW ids for those rows, and invariant
+   * 1 says an item's identity must stay stable or two devices never converge
+   * on it. A restore would also have to survive the app being killed
+   * mid-sheet.
+   *
+   * So nothing is deleted until the outcome is known. Cancel is then not an
+   * undo at all — it is simply the absence of an action, which cannot fail.
+   */
+  const snapshotShop = useCallback(
     async (listId: string): Promise<ShopSnapshot> => {
       const list = lists.find((l) => l.id === listId)
-      // 🚨 Read the ticked names BEFORE deleting them. This is the whole
-      // reason finishShop is async now.
       const ticked = await writes.tickedItemNames(listId)
-      await writes.clearDoneItems(listId)
-      setDevice((d) => withListOpen(d, listId, false))
       return {
         listId,
         listName: list?.name ?? '',
@@ -276,6 +292,11 @@ export function ListlyProvider({ children }: { children: ReactNode }) {
     },
     [lists],
   )
+
+  const finishShop = useCallback(async (listId: string): Promise<void> => {
+    await writes.clearDoneItems(listId)
+    setDevice((d) => withListOpen(d, listId, false))
+  }, [])
 
   const setListCategory = useCallback((listId: string, categoryId: string) => {
     run(writes.setListCategory(listId, categoryId))
@@ -358,7 +379,7 @@ export function ListlyProvider({ children }: { children: ReactNode }) {
     () => ({
       lists, jobs, device, visibleLists,
       addList, deleteList, toggleDefault, setListOpen,
-      addItem, toggleItem, saveItem, deleteItem, reorderItems, finishShop,
+      addItem, toggleItem, saveItem, deleteItem, reorderItems, snapshotShop, finishShop,
       jobsFor, addJob, toggleJob, toggleRemind, saveJob, deleteJob, setDoneOpen,
       dismissBanner,
       ledgerGateOpen, categories, locationOptions, setListCategory,
@@ -367,7 +388,7 @@ export function ListlyProvider({ children }: { children: ReactNode }) {
     [
       lists, jobs, device, visibleLists,
       addList, deleteList, toggleDefault, setListOpen,
-      addItem, toggleItem, saveItem, deleteItem, reorderItems, finishShop,
+      addItem, toggleItem, saveItem, deleteItem, reorderItems, snapshotShop, finishShop,
       jobsFor, addJob, toggleJob, toggleRemind, saveJob, deleteJob, setDoneOpen,
       dismissBanner,
       ledgerGateOpen, categories, locationOptions, setListCategory,

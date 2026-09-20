@@ -412,7 +412,17 @@ main {
    visible BEFORE the tap — but it stays clickable, so tapping it explains
    itself rather than doing nothing. A control that is silently inert is
    indistinguishable from a broken one (Adam, 2026-09-20). */
-.btn.waiting { opacity: .45; }
+/* 🚨 "Nothing to do yet", shown BEFORE the tap.
+   A control that silently ignores a tap is indistinguishable from a broken
+   one (Adam, 2026-09-20, twice). Every such control says so in three ways:
+   it renders muted while there is nothing to do, tapping it anyway explains
+   why, and a failed write names itself.
+
+   🚩 This was `.btn.waiting`, which quietly excluded the round "+" add-item
+   button — that is an `.icon-btn`, not a `.btn`, so it carried the class and
+   got no styling at all. Adam spotted that only Add list looked inert. The
+   rule is unscoped now, so it works on any control that earns it. */
+.waiting { opacity: .45; }
 .btn.sage { background: var(--sage); color: #fff; }
 .btn.ghost { border: 2px solid var(--line-2); background: transparent; color: var(--soft); font-weight: 400; }
 .btn.danger { background: transparent; color: var(--red); padding: 0 12px; }

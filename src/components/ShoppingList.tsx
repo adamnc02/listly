@@ -21,10 +21,11 @@ export function ShoppingList({
   /** Called with the finished shop only when the D4 gate is open. */
   onPriceShop: (shop: ShopSnapshot) => void
 }) {
-  const { device, setListOpen, addItem, toggleItem, reorderItems, finishShop, ledgerGateOpen } =
+  const { device, setListOpen, addItem, toggleItem, reorderItems, snapshotShop, finishShop, ledgerGateOpen } =
     useListly()
   const [draft, setDraft] = useState('')
   const [addHint, setAddHint] = useState<string | null>(null)
+  const [finishHint, setFinishHint] = useState<string | null>(null)
 
   const open = device.openLists[list.id] ?? false
   const left = list.items.filter((i) => !i.done).length
@@ -54,10 +55,11 @@ export function ShoppingList({
 
   let hint = ''
   if (list.items.length) {
-    if (left) {
-      hint = got
-        ? `${left} unticked will stay for next time.`
-        : `Nothing ticked yet — all ${left} stay for next time.`
+    if (!got) {
+      // Nothing ticked: say what to do, not what would happen.
+      hint = 'Tick what you bought, then finish the shop.'
+    } else if (left) {
+      hint = `${left} unticked will stay for next time.`
     } else {
       hint = list.isDefault
         ? 'Everything’s ticked — list will be emptied (it’s a default, so it stays).'
@@ -150,24 +152,46 @@ export function ShoppingList({
             </button>
           </div>
 
-          {addHint && (
+          {addHint && !draft.trim() && (
             <p className="help" style={{ color: 'var(--red)', padding: '0 8px' }} role="alert">
               {addHint}
+            </p>
+          )}
+
+          {finishHint && !got && (
+            <p className="help" style={{ color: 'var(--red)', padding: '0 8px' }} role="alert">
+              {finishHint}
             </p>
           )}
 
           {list.items.length > 0 && (
             <div className="finish">
               <div className="hint">{hint}</div>
-              {/* 🚨 With no ledger this does exactly what it always did:
+              {/* 🚨 Muted until something is ticked, because finishing a shop
+                  where you bought nothing does nothing at all — and a control
+                  that silently ignores a tap is indistinguishable from a
+                  broken one. Tapping it anyway says why.
+
+                  🚨 With no ledger this does exactly what it always did:
                   clear the ticked items and collapse. No price sheet, no
-                  mention of the ledger, nothing to explain. */}
+                  mention of the ledger, nothing to explain.
+
+                  With a ledger it changes NOTHING yet — it only opens the
+                  price sheet. The items are cleared once the outcome is
+                  known, so cancelling leaves the list exactly as it was. */}
               <button
-                className="btn outline"
+                className={`btn outline${got ? '' : ' waiting'}`}
                 onClick={() => {
-                  void finishShop(list.id).then((shop) => {
-                    if (ledgerGateOpen) onPriceShop(shop)
-                  })
+                  if (!got) {
+                    setFinishHint('Tick off what you bought first — there is nothing to finish yet.')
+                    return
+                  }
+                  setFinishHint(null)
+                  if (!ledgerGateOpen) {
+                    void finishShop(list.id)
+                    return
+                  }
+                  void snapshotShop(list.id).then(onPriceShop)
                 }}
               >
                 <TickSmall />

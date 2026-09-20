@@ -18,10 +18,25 @@ import type { IsoDate, LocationOption } from '../types'
  * always card, `note` is the list name verbatim, and `owner_id`/`pot_id`
  * come from the location picked. None of those has UI, deliberately.
  *
- * 🚨 DISMISSING IS A LEGITIMATE OUTCOME. "Finished the shop, didn't price
- * it" writes NO completion row at all. The ticked items have already gone
- * either way — that happened before this sheet opened, and is what Finish
- * shop has always done.
+ * 🚨 THERE ARE THREE WAYS OUT, AND THEY DO DIFFERENT THINGS.
+ *
+ *   Save              → writes the completion row, then clears the ticked
+ *                       items and collapses the list.
+ *   "Don't price it"  → clears the ticked items and collapses the list, and
+ *                       writes NO completion row. Finishing a shop without
+ *                       telling the ledger about it is a legitimate outcome.
+ *   Cancel            → swipe down, tap the dimmed area, or press Escape.
+ *                       NOTHING happens. The list is exactly as it was, same
+ *                       items ticked and unticked, still open.
+ *
+ * 🚨 That last one is why this sheet no longer deletes anything on open
+ * (Adam, 2026-09-20: there was no way out of Finish shop without losing the
+ * ticked items). It is NOT implemented as an undo: re-inserting the items
+ * would mint new ids, and invariant 1 says an item's identity must stay
+ * stable or two devices never converge on it. Nothing is deleted until the
+ * outcome is known, so cancel is the absence of an action rather than the
+ * reversal of one — which means it cannot fail, and it survives the app
+ * being killed mid-sheet.
  *
  * 🚨 Every date goes through src/lib/date.ts. `<input type="date">` speaks
  * 'YYYY-MM-DD', which is exactly IsoDate, so nothing here ever calls
@@ -30,10 +45,14 @@ import type { IsoDate, LocationOption } from '../types'
  */
 export function FinishShopSheet({
   shop,
-  onClose,
+  onCancel,
+  onComplete,
 }: {
   shop: ShopSnapshot
-  onClose: () => void
+  /** Swipe, scrim or Escape. Changes nothing at all. */
+  onCancel: () => void
+  /** Save, or "Don't price it": the shop really is finished. */
+  onComplete: () => void
 }) {
   const { categories, locationOptions, saveShopCompletion } = useListly()
   const householdId = useHouseholdId()
@@ -95,7 +114,7 @@ export function FinishShopSheet({
       spendDate,
       location,
     })
-      .then(onClose)
+      .then(onComplete)
       .catch((e: unknown) => {
         setSaving(false)
         setError(`Couldn't save it: ${e instanceof Error ? e.message : String(e)}`)
@@ -105,7 +124,7 @@ export function FinishShopSheet({
   const stepNumber = stepIndex + 1
 
   return (
-    <Sheet label="Price this shop" onClose={onClose}>
+    <Sheet label="Price this shop" onClose={onCancel}>
       <div className="pagehead" style={{ padding: 0 }}>
         <h2>{shop.listName || 'This shop'}</h2>
         <span className="sub">
@@ -217,8 +236,10 @@ export function FinishShopSheet({
             Back
           </button>
         ) : (
-          <button className="btn ghost" onClick={onClose}>
-            Skip
+          // Finishes the shop WITHOUT a ledger entry — deliberately distinct
+          // from cancelling, which changes nothing.
+          <button className="btn ghost" onClick={onComplete}>
+            Don’t price it
           </button>
         )}
         <div style={{ flex: 1 }} />
@@ -237,7 +258,7 @@ export function FinishShopSheet({
       </div>
 
       <p className="help" style={{ textAlign: 'center' }}>
-        Closing this leaves the shop unpriced. Nothing is added to the ledger.
+        Swipe down to cancel — your list stays exactly as it is, still ticked.
       </p>
     </Sheet>
   )
