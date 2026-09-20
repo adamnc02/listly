@@ -18,9 +18,17 @@ import { powerSyncDb } from '../lib/powersync/database'
  * So the state is shown, not inferred:
  *   connected + synced  → a quiet dot, no text (the normal case)
  *   downloading/uploading → "Syncing…"
- *   not connected       → "Offline" (which is FINE — this app is built for
- *                         a shop with no signal; the queue drains later)
+ *   not connected, HAS synced before → "Offline" (which is FINE — this app is
+ *                         built for a shop with no signal; the queue drains
+ *                         later, and there is local data to work from)
+ *   not connected, NEVER synced → "Connecting…", never "Offline"
  *   connected, never synced → "Connecting…"
+ *
+ * 🚩 That "never synced" distinction was added 2026-09-20 after Adam signed
+ * in on the deployed build and got an empty app badged "Offline" while the
+ * first download was still in flight. "Offline" means "working from local
+ * data" — and before a first sync there IS no local data, so saying it was
+ * simply untrue. An honest label costs one condition.
  *
  * `lastSyncedAt` is the honest one: if it is still undefined minutes after
  * sign-in, sync is genuinely not working, whatever the console says.
@@ -54,8 +62,9 @@ export function SyncStatusDot() {
     label = 'Connecting…'
     colour = 'var(--brown-2)'
   } else if (!connected) {
-    label = 'Offline'
-    colour = 'var(--muted)'
+    // 🚨 "Offline" is only honest once this device has data of its own.
+    label = synced ? 'Offline' : 'Connecting…'
+    colour = synced ? 'var(--muted)' : 'var(--brown-2)'
   } else if (busy) {
     label = 'Syncing…'
   } else if (!synced) {
