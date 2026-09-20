@@ -9,12 +9,29 @@ import { describeSyncError } from '../lib/powersync/describeSyncError'
 /**
  * Boots sync, and holds the household guard.
  *
- * 🚨 THE UI IS NEVER BLOCKED ON THE NETWORK. This is an offline-first app —
- * the whole point is that it works standing in a shop with no signal — so
- * waiting for connect() before rendering anything was backwards. It also hid
- * a real failure: on 2026-09-20 the first live run sat on "Getting your
- * lists…" indefinitely, because a step that never resolves and never throws
- * has no way to report itself.
+ * 🚨 THE UI IS NEVER BLOCKED ON THE NETWORK — EXCEPT ON A DEVICE THAT HAS
+ * NEVER SYNCED. This is an offline-first app; the whole point is that it
+ * works standing in a shop with no signal, so waiting for connect() on every
+ * launch was backwards. It also hid a real failure: on 2026-09-20 the first
+ * live run sat on "Getting your lists…" indefinitely, because a step that
+ * never resolves and never throws has no way to report itself.
+ *
+ * 🚩 BUT THAT WENT TOO FAR, and Adam found it on the deployed build the same
+ * evening: signing in on a device with no local data rendered an EMPTY app
+ * with an "Offline" badge, and only showed his lists after he force-quit and
+ * relaunched. Nothing was broken — the download was simply still in flight,
+ * and the app had already said it was done.
+ *
+ * An empty app is indistinguishable from three different things: a genuinely
+ * empty household, a download still running, and sync being broken. On the
+ * FIRST sync for a given user on a given device there is no local data to
+ * fall back on, so there is nothing to be offline-first ABOUT — waiting is
+ * the honest answer, and it is what `shared-finance-ledger` has always done
+ * (`sub.waitForFirstSync()` before it renders).
+ *
+ * So: a device that has synced before renders immediately, as it did. A
+ * device that has not waits, says "Getting your lists…", and still gives up
+ * gracefully rather than trapping anyone.
  *
  * So only the two steps that genuinely cannot be done offline are awaited,
  * each with a timeout, and everything else happens behind the rendered app:
@@ -41,9 +58,46 @@ import { describeSyncError } from '../lib/powersync/describeSyncError'
 
 type Status =
   | { kind: 'starting' }
+  /** First sync on this device: downloading, and SAYING so. See §First sync. */
+  | { kind: 'first-sync' }
   | { kind: 'ready' }
   | { kind: 'error'; message: string }
   | { kind: 'suspended'; message: string }
+
+/**
+ * 🚨 "Has THIS device finished a first sync for THIS user?"
+ *
+ * Per user, because a second account signing in on the same device has its
+ * own empty local data and must wait for its own first download. Per device,
+ * because that is what the question is about — localStorage is the right
+ * place for it and it is not household data.
+ */
+const firstSyncKey = (userId: string) => `listly:first-sync:${userId}`
+
+/**
+ * The handle `syncStream(...).subscribe()` returns. The SDK does not export
+ * the type from `@powersync/web`, so it is inferred from the method rather
+ * than hand-written — which also means it cannot drift from the SDK.
+ */
+type StreamSub = Awaited<ReturnType<ReturnType<typeof powerSyncDb.syncStream>['subscribe']>>
+
+function hasSyncedBefore(userId: string): boolean {
+  try {
+    return localStorage.getItem(firstSyncKey(userId)) !== null
+  } catch {
+    // Private mode, or storage blocked. Treat as "never synced": waiting once
+    // more is harmless, and rendering an empty app is not.
+    return false
+  }
+}
+
+function markSynced(userId: string) {
+  try {
+    localStorage.setItem(firstSyncKey(userId), new Date().toISOString())
+  } catch {
+    /* ignore — the only cost is waiting again next launch */
+  }
+}
 
 export function SyncRoot({ children }: { children: ReactNode }) {
   const { session } = useAuth()
@@ -112,6 +166,7 @@ export function SyncRoot({ children }: { children: ReactNode }) {
     if (!userId) return
     let cancelled = false
     let unsubscribeWatch: (() => void) | null = null
+    let unsubscribeStreams: (() => void) | null = null
 
     /** Never let one unresolved promise hang the whole app silently. */
     const withTimeout = <T,>(p: Promise<T>, ms: number, what: string): Promise<T> =>
@@ -154,27 +209,52 @@ export function SyncRoot({ children }: { children: ReactNode }) {
         return
       }
 
-      // The app is usable from here. Everything below is background.
-      setStatus({ kind: 'ready' })
+      // 🚨 A device that has synced before has local data to show, so it
+      // renders NOW and syncs behind the app. A device that has not would
+      // render an empty app that looks finished, so it waits below instead.
+      const firstRun = !hasSyncedBefore(userId)
+      recordBootStep('first sync on this device?', 'note', firstRun ? 'yes — will wait' : 'no — rendering now')
+      if (!firstRun) setStatus({ kind: 'ready' })
+      else setStatus({ kind: 'first-sync' })
+
+      let ownSub: StreamSub | null = null
+      let refSub: StreamSub | null = null
 
       try {
-        // 3 & 4. SUBSCRIBE FIRST, THEN CONNECT.
+        // 3 & 4. SUBSCRIBE, THEN CONNECT.
         //
-        // 🚨 This order is not cosmetic, and getting it wrong cost an
-        // evening. `connect()` with `includeDefaultStreams: false` and NO
-        // subscriptions gives PowerSync nothing to sync, so the connection
-        // never completes — and `await connect()` then never resolves. It
-        // does not throw, it does not time out, and SyncStatus reports
-        // "not connected, no error", because from its point of view nothing
-        // was ever asked for. The startup log showed `connect() called` with
-        // no matching `connect() returned`, which is what finally located it.
+        // This order was adopted on 2026-09-20 after `await connect()` hung
+        // forever with nothing subscribed — no throw, no timeout, and
+        // SyncStatus reporting "not connected, no error". The startup log
+        // showed `connect() called` with no matching `connect() returned`,
+        // which is what located it.
         //
-        // PROMPT-01 §9.3 shows connect-then-subscribe; that ordering is
-        // wrong for a client with no auto-subscribed streams.
-        await powerSyncDb.syncStream(LISTLY_STREAM).subscribe()
+        // 🚩 Honest caveat, added 2026-09-20 after checking rather than
+        // assuming: `shared-finance-ledger` does the OPPOSITE — connect,
+        // then subscribe, then `waitForFirstSync()` — and it works in
+        // production against this same instance. So connect-first is not
+        // inherently broken, and whatever caused that hang was probably not
+        // the ordering alone. Reading the SDK, `subscribe()` persists the
+        // subscription into the local core and `connectInternal()` passes
+        // `this.activeStreams` into the sync implementation, so BOTH orders
+        // are supported by design.
+        //
+        // This order is kept because it is the one Listly has been proven
+        // on. Do not "fix" it to match the ledger without a reason and a
+        // test — but do not repeat the old claim that the other order
+        // cannot work either, because it demonstrably does.
+        //
+        // The handles are KEPT, for two reasons: waitForFirstSync() below is
+        // on them, and the SDK logs a "subscription leaked!" warning through
+        // a FinalizationRegistry if they are dropped without unsubscribe().
+        ownSub = await powerSyncDb.syncStream(LISTLY_STREAM).subscribe()
         recordBootStep(`subscribed to ${LISTLY_STREAM}`, 'ok')
-        await powerSyncDb.syncStream(LISTLY_REF_STREAM).subscribe()
+        refSub = await powerSyncDb.syncStream(LISTLY_REF_STREAM).subscribe()
         recordBootStep(`subscribed to ${LISTLY_REF_STREAM}`, 'ok')
+        unsubscribeStreams = () => {
+          ownSub?.unsubscribe()
+          refSub?.unsubscribe()
+        }
         if (cancelled) return
 
         // Belt and braces: never await this indefinitely again. If it has
@@ -194,7 +274,41 @@ export function SyncRoot({ children }: { children: ReactNode }) {
         recordBootStep('connect / subscribe', 'fail', msg)
         console.error('[powersync] could not connect or subscribe:', e)
         setSyncError(describeSyncError(e))
+        // 🚨 Render anyway. A first run that cannot connect must still get
+        // a usable app and a visible reason — never a permanent spinner.
+        setStatus({ kind: 'ready' })
         return
+      }
+
+      // ── First sync ─────────────────────────────────────────────────────
+      // Only ever on a device with no local data for this user. Both streams,
+      // because the lists come down one and the ledger reference data the
+      // other, and an app with lists but no categories is still half-built.
+      if (firstRun) {
+        try {
+          await withTimeout(
+            Promise.all([ownSub!.waitForFirstSync(), refSub!.waitForFirstSync()]),
+            30000,
+            'Downloading your lists',
+          )
+          if (cancelled) return
+          markSynced(userId)
+          recordBootStep('first sync complete', 'ok')
+        } catch (e) {
+          if (cancelled) return
+          const msg = e instanceof Error ? e.message : String(e)
+          recordBootStep('first sync', 'fail', msg)
+          // 🚨 Never trap anyone behind a spinner. Listly syncs five small
+          // tables and a five-table mirror, so thirty seconds is already far
+          // longer than this can honestly take; past that, show the app and
+          // say plainly that it is still catching up. Deliberately NOT
+          // marked as synced, so the next launch waits properly.
+          setSyncError(
+            'Your lists are still downloading. The app is usable, but it may look empty until ' +
+              'that finishes — check the sync dot in the header.',
+          )
+        }
+        setStatus({ kind: 'ready' })
       }
 
       try {
@@ -232,6 +346,7 @@ export function SyncRoot({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true
       unsubscribeWatch?.()
+      unsubscribeStreams?.()
     }
   }, [userId, checkMembership])
 
@@ -256,6 +371,17 @@ export function SyncRoot({ children }: { children: ReactNode }) {
 
   if (status.kind === 'starting') {
     return <Splash>Getting your lists…</Splash>
+  }
+
+  if (status.kind === 'first-sync') {
+    return (
+      <Splash>
+        <div>Getting your lists…</div>
+        <div className="help" style={{ marginTop: 10 }}>
+          First time on this device, so everything is downloading. It only happens once.
+        </div>
+      </Splash>
+    )
   }
 
   if (status.kind === 'error') {
