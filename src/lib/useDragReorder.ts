@@ -1,56 +1,94 @@
 import { useCallback, useRef, useState } from 'react'
 
 /**
- * Long-press-then-drag reordering, for touch AND mouse.
+ * Long-press-then-drag reordering, for touch AND mouse, showing a landing
+ * cursor.
  *
- * LISTLY-DESIGN.md §2 flags this as a real-build gap: "The prototype uses
- * desktop mouse drag; the real build needs touch drag (e.g. long-press,
- * then drag)". HTML5 drag-and-drop, which the prototype uses, does not fire
- * on iOS Safari at all — so on the phone this app is actually for, the
- * prototype cannot reorder anything.
+ * ── The visual, and where it comes from ────────────────────────────────
+ * The dragged row stays where it is and fades; a 3px line shows where it
+ * would land if released now. That is My Dream Clean's diary reorder
+ * (`.diary-drop-indicator`), which BLOC's plan page already ported
+ * (`.plan-drop-indicator`, whose own comment cites MDC). Adam asked Listly
+ * to match, so the same idiom is used here and the CSS mirrors theirs: 3px
+ * tall, 2px radius, accent colour, with a 2px surface-coloured ring so the
+ * line separates cleanly from whatever it sits between.
  *
- * Pointer Events are used instead: one implementation covers touch, pen and
- * mouse, and `setPointerCapture` keeps the gesture alive even when the
- * finger slides outside the row it started on.
+ * ── What is deliberately NOT copied ────────────────────────────────────
+ * Both of those apps drive the drag with **HTML5 drag-and-drop**
+ * (`draggable="true"` + `ondragstart`/`ondragover`) and no touch shim.
+ * Those events do not fire from touch on iPhone Safari, so that mechanism
+ * cannot work on the device Listly is built for (APP-KNOWLEDGE: iOS only).
+ * Pointer Events are used instead — one implementation covering touch, pen
+ * and mouse — with `setPointerCapture` so the gesture survives the finger
+ * sliding outside the row it started on.
  *
- * How it behaves:
- *   - press and hold the grip for LONG_PRESS_MS -> the row lifts;
+ * ── The gesture ────────────────────────────────────────────────────────
+ *   - press and hold the grip for LONG_PRESS_MS -> the row fades and the
+ *     cursor appears;
  *   - moving before then cancels, so the list still scrolls normally under
  *     a finger that happens to start on the grip;
- *   - once lifted, the row follows the finger and its neighbours slide to
- *     show where it will land;
- *   - releasing commits the move; Escape or a cancelled pointer aborts it.
- *
- * Rows are assumed to be uniform height within one list, which they are
- * (`.row { min-height: 48px }` and one line of text). The height is
- * measured from the live DOM rather than hard-coded, so a wrapped item
- * still lands where it looks like it will.
+ *   - releasing commits; a cancelled pointer aborts with no change.
  */
 
 const LONG_PRESS_MS = 350
 /** Movement beyond this before the long-press fires means "I am scrolling". */
 const CANCEL_SLOP_PX = 8
 
-export interface DragState {
-  /** Index of the row being dragged, or null when nothing is being dragged. */
-  index: number | null
-  /** Where it would land if released now. */
-  targetIndex: number
-  /** Pixels the lifted row is offset from its home position. */
-  offsetY: number
+export interface DragReorder {
+  /** The row being dragged, or null. It renders faded and stays in place. */
+  draggingIndex: number | null
+  /**
+   * Where the cursor is drawn: the index the row would land BEFORE, from 0
+   * to `count` inclusive (`count` meaning "after the last row"). Null when
+   * no drag is in progress. Same semantics as MDC's `diaryDragBeforeIndex`.
+   */
+  dropIndex: number | null
+  containerRef: (el: HTMLDivElement | null) => void
+  handleProps: (index: number) => {
+    onPointerDown: (e: React.PointerEvent<HTMLElement>) => void
+    onPointerMove: (e: React.PointerEvent<HTMLElement>) => void
+    onPointerUp: (e: React.PointerEvent<HTMLElement>) => void
+    onPointerCancel: (e: React.PointerEvent<HTMLElement>) => void
+  }
 }
 
-const IDLE: DragState = { index: null, targetIndex: 0, offsetY: 0 }
+/**
+ * Turns a "insert before this position" index — which refers to the array
+ * BEFORE the dragged row is removed — into the target index for an array
+ * move that removes first and then inserts (standard splice semantics, and
+ * what `reorderItems` does). Lifted from MDC's `diaryDragToIdx`, including
+ * its reasoning.
+ */
+function toIndexFromBefore(beforeIdx: number, fromIdx: number, count: number): number {
+  if (beforeIdx >= count) return count - 1 // dropped below everything — lands at the end
+  if (beforeIdx <= fromIdx) return beforeIdx // earlier than the removal, so unaffected
+  return beforeIdx - 1 // shifts down by one once the earlier dragged row is removed
+}
 
-export function useDragReorder(count: number, onReorder: (from: number, to: number) => void) {
-  const [drag, setDrag] = useState<DragState>(IDLE)
+export function useDragReorder(count: number, onReorder: (from: number, to: number) => void): DragReorder {
+  const [draggingIndex, setDraggingIndex] = useState<number | null>(null)
+  const [dropIndex, setDropIndex] = useState<number | null>(null)
 
+  const container = useRef<HTMLDivElement | null>(null)
   const timer = useRef<number | null>(null)
   const startY = useRef(0)
-  const rowHeight = useRef(48)
   const active = useRef(false)
   const fromIndex = useRef(0)
-  const targetIndex = useRef(0)
+  const dropBefore = useRef(0)
+  /**
+   * Row midpoints, measured ONCE when the drag starts.
+   *
+   * Measuring live would feed back on itself: the cursor is a real element
+   * in the flow, so drawing it moves every row below it by its own height,
+   * which changes the measurement that decided where to draw it. Nothing
+   * else moves during a drag in this idiom — the dragged row stays put —
+   * so one measurement stays valid for the whole gesture.
+   */
+  const midpoints = useRef<number[]>([])
+
+  const setContainer = useCallback((el: HTMLDivElement | null) => {
+    container.current = el
+  }, [])
 
   const clearTimer = useCallback(() => {
     if (timer.current !== null) {
@@ -63,93 +101,94 @@ export function useDragReorder(count: number, onReorder: (from: number, to: numb
     clearTimer()
     active.current = false
     document.body.classList.remove('rows-dragging')
-    setDrag(IDLE)
+    setDraggingIndex(null)
+    setDropIndex(null)
   }, [clearTimer])
+
+  const measure = useCallback(() => {
+    const el = container.current
+    if (!el) {
+      midpoints.current = []
+      return
+    }
+    midpoints.current = Array.from(el.querySelectorAll<HTMLElement>('[data-drag-row]')).map((row) => {
+      const r = row.getBoundingClientRect()
+      return r.top + r.height / 2
+    })
+  }, [])
+
+  /** The index the row would land before, from the pointer's Y. */
+  const beforeIndexFor = useCallback((clientY: number): number => {
+    const mids = midpoints.current
+    for (let i = 0; i < mids.length; i++) {
+      if (clientY < mids[i]) return i
+    }
+    return mids.length
+  }, [])
 
   const onPointerDown = useCallback(
     (index: number) => (e: React.PointerEvent<HTMLElement>) => {
-      // Ignore secondary mouse buttons; a right-click is not a drag.
-      if (e.button !== 0) return
-
-      const row = (e.currentTarget as HTMLElement).closest('.row') as HTMLElement | null
-      if (row) rowHeight.current = row.getBoundingClientRect().height || 48
+      if (e.button !== 0) return // a right-click is not a drag
 
       startY.current = e.clientY
       fromIndex.current = index
-      targetIndex.current = index
+      dropBefore.current = index
 
       const target = e.currentTarget as HTMLElement
       const pointerId = e.pointerId
 
       timer.current = window.setTimeout(() => {
         active.current = true
-        // Capture AFTER the press qualifies, so a plain scroll never has the
-        // pointer taken away from it.
+        measure()
+        // Capture AFTER the press qualifies, so an ordinary scroll never
+        // has the pointer taken away from it.
         try {
           target.setPointerCapture(pointerId)
         } catch {
-          // Safari can refuse if the pointer has already been released.
+          // Safari can refuse if the pointer was already released.
         }
         document.body.classList.add('rows-dragging')
         if ('vibrate' in navigator) navigator.vibrate?.(10)
-        setDrag({ index, targetIndex: index, offsetY: 0 })
+        setDraggingIndex(index)
+        setDropIndex(index)
       }, LONG_PRESS_MS)
     },
-    [],
+    [measure],
   )
 
   const onPointerMove = useCallback(
     (e: React.PointerEvent<HTMLElement>) => {
-      const dy = e.clientY - startY.current
-
       if (!active.current) {
         // Still deciding. A real scroll cancels the pending long press.
-        if (Math.abs(dy) > CANCEL_SLOP_PX) clearTimer()
+        if (Math.abs(e.clientY - startY.current) > CANCEL_SLOP_PX) clearTimer()
         return
       }
-
       e.preventDefault()
-      const shift = Math.round(dy / rowHeight.current)
-      const next = Math.min(count - 1, Math.max(0, fromIndex.current + shift))
-      targetIndex.current = next
-      setDrag({ index: fromIndex.current, targetIndex: next, offsetY: dy })
+      const before = beforeIndexFor(e.clientY)
+      dropBefore.current = before
+      setDropIndex(before)
     },
-    [clearTimer, count],
+    [beforeIndexFor, clearTimer],
   )
 
   const onPointerUp = useCallback(() => {
-    if (active.current && targetIndex.current !== fromIndex.current) {
-      onReorder(fromIndex.current, targetIndex.current)
+    if (active.current) {
+      const from = fromIndex.current
+      const to = toIndexFromBefore(dropBefore.current, from, count)
+      if (to !== from && to >= 0) onReorder(from, to)
     }
     reset()
-  }, [onReorder, reset])
-
-  const onPointerCancel = useCallback(() => reset(), [reset])
-
-  /**
-   * How far a row that is NOT being dragged should slide, to open a gap at
-   * the target position.
-   */
-  const shiftFor = useCallback(
-    (index: number): number => {
-      if (drag.index === null || index === drag.index) return 0
-      const { index: from, targetIndex: to } = drag
-      if (from < to && index > from && index <= to) return -rowHeight.current
-      if (from > to && index >= to && index < from) return rowHeight.current
-      return 0
-    },
-    [drag],
-  )
+  }, [count, onReorder, reset])
 
   return {
-    drag,
-    shiftFor,
-    /** Spread onto the grip handle of each row. */
+    draggingIndex,
+    dropIndex,
+    containerRef: setContainer,
     handleProps: (index: number) => ({
       onPointerDown: onPointerDown(index),
       onPointerMove,
       onPointerUp,
-      onPointerCancel,
+      onPointerCancel: reset,
     }),
   }
 }
