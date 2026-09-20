@@ -23,16 +23,30 @@ export function JobsPage({ page }: { page: JobPage }) {
   const [text, setText] = useState('')
   const [due, setDue] = useState('')
   const [editing, setEditing] = useState<string | null>(null)
+  const [hint, setHint] = useState<string | null>(null)
 
   const all = jobsFor(page)
   const open = sortOpenJobs(all.filter((j) => !j.done))
   const done = all.filter((j) => j.done)
   const doneOpen = device.doneOpen[page]
 
+  // A job needs a name; a due date is optional. Say so rather than ignoring
+  // the tap — the same rule as every other "add" in the app.
   const submit = () => {
-    addJob(page, text, due)
-    setText('')
-    setDue('')
+    const trimmed = text.trim()
+    if (!trimmed) {
+      setHint('Give the job a name first.')
+      return
+    }
+    setHint(null)
+    void addJob(page, trimmed, due)
+      .then(() => {
+        setText('')
+        setDue('')
+      })
+      .catch((e: unknown) =>
+        setHint(`Couldn't add it: ${e instanceof Error ? e.message : String(e)}`),
+      )
   }
 
   return (
@@ -58,10 +72,15 @@ export function JobsPage({ page }: { page: JobPage }) {
             Due
             <input type="date" value={due} onChange={(e) => setDue(e.target.value)} />
           </label>
-          <button className="btn sage" onClick={submit}>
+          <button className={`btn sage${text.trim() ? '' : ' waiting'}`} onClick={submit}>
             Add
           </button>
         </div>
+        {hint && (
+          <p className="help" style={{ color: 'var(--red)', margin: 0 }} role="alert">
+            {hint}
+          </p>
+        )}
       </div>
 
       <div className="card jobs">

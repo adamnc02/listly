@@ -41,7 +41,7 @@ interface ListlyValue {
   deleteList: (id: string) => void
   toggleDefault: (id: string) => void
   setListOpen: (id: string, open: boolean) => void
-  addItem: (listId: string, text: string) => void
+  addItem: (listId: string, text: string) => Promise<void>
   toggleItem: (listId: string, itemId: string) => void
   saveItem: (listId: string, itemId: string, text: string, moveToListId: string, newListName: string) => void
   deleteItem: (listId: string, itemId: string) => void
@@ -49,7 +49,7 @@ interface ListlyValue {
   finishShop: (listId: string) => void
 
   jobsFor: (page: JobPage) => Job[]
-  addJob: (page: JobPage, text: string, due: IsoDate) => void
+  addJob: (page: JobPage, text: string, due: IsoDate) => Promise<void>
   toggleJob: (id: string) => void
   toggleRemind: (id: string) => void
   saveJob: (id: string, text: string, due: IsoDate, remind: boolean) => void
@@ -155,11 +155,13 @@ export function ListlyProvider({ children }: { children: ReactNode }) {
     setDevice((d) => withListOpen(d, id, open))
   }, [])
 
+  // Not wrapped in run(): the caller awaits it so a failed write can be
+  // shown rather than logged to a console nobody is reading.
   const addItem = useCallback(
-    (listId: string, text: string) => {
+    async (listId: string, text: string) => {
       const trimmed = text.trim()
       if (!trimmed) return
-      run(writes.insertItem(householdId, listId, trimmed))
+      await writes.insertItem(householdId, listId, trimmed)
     },
     [householdId],
   )
@@ -217,10 +219,10 @@ export function ListlyProvider({ children }: { children: ReactNode }) {
   const jobsFor = useCallback((page: JobPage) => jobs.filter((j) => j.page === page), [jobs])
 
   const addJob = useCallback(
-    (page: JobPage, text: string, due: IsoDate) => {
+    async (page: JobPage, text: string, due: IsoDate) => {
       const trimmed = text.trim()
       if (!trimmed) return
-      run(writes.insertJob(page, householdId, trimmed, due))
+      await writes.insertJob(page, householdId, trimmed, due)
     },
     [householdId],
   )
