@@ -437,6 +437,21 @@ nav button[aria-current=page] { background: var(--brown); color: #fff; }
   box-shadow: 0 4px 12px rgba(179, 54, 44, .28);
 }
 
+.sync-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 18px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.sync-dot .dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
 /* ---------- bottom sheets ---------- */
 /* Rendered through createPortal to document.body, never from inside <main>:
    page components live in a scrolling, overflow-y:auto container, and an

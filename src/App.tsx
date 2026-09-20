@@ -9,6 +9,7 @@ import { Shopping } from './pages/Shopping'
 import { JobsPage } from './pages/JobsPage'
 import { AccountModal } from './components/AccountModal'
 import { Me } from './components/Icons'
+import { SyncStatusDot } from './components/SyncStatusDot'
 import icon from '/apple-touch-icon.png'
 
 export type Tab = 'shopping' | 'house' | 'mine'
@@ -38,6 +39,7 @@ function Shell() {
       <header>
         <img src={icon} alt="" />
         <div className="brand grow">Listly</div>
+        <SyncStatusDot />
         <button
           className="icon-btn"
           style={{ color: 'var(--brown-2)' }}
