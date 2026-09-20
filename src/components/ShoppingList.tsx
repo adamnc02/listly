@@ -20,8 +20,9 @@ export function ShoppingList({ list, onEditItem }: { list: List; onEditItem: (it
   const got = list.items.length - left
   const count = list.items.length === 0 ? 'empty' : left ? `${left} to get` : 'all got'
 
-  const { drag, shiftFor, handleProps } = useDragReorder(list.items.length, (from, to) =>
-    reorderItems(list.id, from, to),
+  const { draggingIndex, dropIndex, containerRef, handleProps } = useDragReorder(
+    list.items.length,
+    (from, to) => reorderItems(list.id, from, to),
   )
 
   const submit = () => {
@@ -63,48 +64,45 @@ export function ShoppingList({ list, onEditItem }: { list: List; onEditItem: (it
         <div className="listbody">
           {list.items.length === 0 && <div className="empty-note">Nothing on this list yet.</div>}
 
-          {list.items.map((item, index) => {
-            const dragging = drag.index === index
-            const shift = shiftFor(index)
-            return (
-              <div
-                key={item.id}
-                className={`row${dragging ? ' dragging' : ''}${!dragging && shift !== 0 ? ' shifted' : ''}`}
-                style={{
-                  transform: dragging
-                    ? `translateY(${drag.offsetY}px)`
-                    : shift !== 0
-                      ? `translateY(${shift}px)`
-                      : undefined,
-                }}
-              >
-                <span
-                  className="grip"
-                  title="Hold, then drag to reorder"
-                  role="button"
-                  tabIndex={-1}
-                  aria-label={`Reorder ${item.text}`}
-                  {...handleProps(index)}
-                >
-                  <Grip />
-                </span>
-                <button
-                  className="tick"
-                  onClick={() => toggleItem(list.id, item.id)}
-                  aria-pressed={item.done}
-                  aria-label={`Tick off ${item.text}`}
-                >
-                  <span className={`box${item.done ? ' on' : ''}`}>{item.done && <Tick />}</span>
-                </button>
-                <button
-                  className={`itemtext${item.done ? ' done' : ''}`}
-                  onClick={() => onEditItem(item.id)}
-                >
-                  {item.text}
-                </button>
+          {/* The landing cursor is a real element in the flow, drawn before
+              whichever row the dragged item would land above — and after the
+              last row when it would go to the end. Same mechanism as My Dream
+              Clean's diary and BLOC's plan page, which insert one shared
+              indicator element; React just does it declaratively. */}
+          <div ref={containerRef}>
+            {list.items.map((item, index) => (
+              <div key={item.id}>
+                {dropIndex === index && <div className="drop-cursor" role="presentation" />}
+                <div className={`row${draggingIndex === index ? ' dragging' : ''}`} data-drag-row>
+                  <span
+                    className="grip"
+                    title="Hold, then drag to reorder"
+                    role="button"
+                    tabIndex={-1}
+                    aria-label={`Reorder ${item.text}`}
+                    {...handleProps(index)}
+                  >
+                    <Grip />
+                  </span>
+                  <button
+                    className="tick"
+                    onClick={() => toggleItem(list.id, item.id)}
+                    aria-pressed={item.done}
+                    aria-label={`Tick off ${item.text}`}
+                  >
+                    <span className={`box${item.done ? ' on' : ''}`}>{item.done && <Tick />}</span>
+                  </button>
+                  <button
+                    className={`itemtext${item.done ? ' done' : ''}`}
+                    onClick={() => onEditItem(item.id)}
+                  >
+                    {item.text}
+                  </button>
+                </div>
               </div>
-            )
-          })}
+            ))}
+            {dropIndex === list.items.length && <div className="drop-cursor" role="presentation" />}
+          </div>
 
           <div className="addrow">
             <input

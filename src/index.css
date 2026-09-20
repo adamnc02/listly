@@ -212,16 +212,29 @@ main {
   cursor: grab;
 }
 
-/* Touch drag (Phase 1 §12): long-press the grip, then drag. The lifted row
-   follows the finger; its neighbours slide to show where it will land. */
-.row.dragging {
-  position: relative;
-  z-index: 2;
-  box-shadow: 0 6px 18px rgba(59, 47, 38, .22);
-  background: var(--paper);
-}
+/* Touch drag: long-press the grip, then drag. The dragged row stays put and
+   fades; a cursor shows where it would land.
+
+   This is My Dream Clean's diary indicator (.diary-drop-indicator), which
+   BLOC's plan page already ported (.plan-drop-indicator) — Adam asked Listly
+   to match, so the measurements are theirs: 3px tall, 2px radius, accent
+   colour, and a 2px ring in the surface colour so the line reads as separate
+   from whatever it sits between. The accent here is --sage, Listly's action
+   colour, which is what --accent is in each of those apps.
+
+   Only the LOOK is shared. Both of those drive the drag with HTML5
+   drag-and-drop, which does not fire from touch on iPhone Safari; Listly uses
+   Pointer Events instead. See src/lib/useDragReorder.ts. */
+.row.dragging { opacity: .35; }
 .row.dragging .grip { cursor: grabbing; }
-.row.shifted { transition: transform .16s ease; }
+
+.drop-cursor {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--sage);
+  box-shadow: 0 0 0 2px var(--paper);
+}
+
 .rows-dragging { touch-action: none; user-select: none; -webkit-user-select: none; }
 
 .tick {
@@ -448,5 +461,5 @@ nav button[aria-current=page] { background: var(--brown); color: #fff; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 
 @media (prefers-reduced-motion: reduce) {
-  .chev, .row.shifted { transition: none; }
+  .chev { transition: none; }
 }
