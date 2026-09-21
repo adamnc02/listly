@@ -90,7 +90,8 @@ interface ListlyValue {
   categories: LedgerCategory[]
   locationOptions: LocationOption[]
   setListCategory: (listId: string, categoryId: string) => void
-  saveShopCompletion: (draft: ShopCompletionDraft) => Promise<void>
+  /** Resolves to the completion row's id, which ShopConfirmation watches. */
+  saveShopCompletion: (draft: ShopCompletionDraft) => Promise<string>
   failedCompletions: FailedCompletion[]
   retryLedger: (completionId: string) => void
 
@@ -312,7 +313,7 @@ export function ListlyProvider({ children }: { children: ReactNode }) {
       }
       // Deliberately not wrapped in run(): the sheet awaits this so it can
       // show the user why it failed rather than closing on a lie.
-      await writes.insertShopCompletion(householdId, draft)
+      return writes.insertShopCompletion(householdId, draft)
     },
     [householdId, lists],
   )

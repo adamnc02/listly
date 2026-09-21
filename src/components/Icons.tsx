@@ -145,3 +145,38 @@ export const Sliders = () => (
     <circle cx="8" cy="17" r="2" />
   </Line>
 )
+
+// ── The Finish-shop confirmation (ShopConfirmation.tsx) ─────────────────────
+// 🚩 Wallet and Store are NOT from the prototype. They are lucide's `wallet`
+// and `store`, path data copied verbatim from lucide-react v1.31 (ISC
+// licence) — Wallet is the exact icon shared-finance-ledger's bottom nav uses
+// for its Wallet tab (Adam, 2026-09-21: "use the wallet icon from
+// shared-finance-ledger"). Copied rather than added as a dependency, for the
+// same reason as every icon above: two drawings do not justify a package.
+// Lucide's own style is 2px stroke with rounded caps, so they sit with the
+// rest of this file unaltered.
+
+export const Wallet = ({ size = 24 }: Props) => (
+  <Line size={size}>
+    <path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1" />
+    <path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4" />
+  </Line>
+)
+
+export const Store = ({ size = 24 }: Props) => (
+  <Line size={size}>
+    <path d="M15 21v-5a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v5" />
+    <path d="M17.774 10.31a1.12 1.12 0 0 0-1.549 0 2.5 2.5 0 0 1-3.451 0 1.12 1.12 0 0 0-1.548 0 2.5 2.5 0 0 1-3.452 0 1.12 1.12 0 0 0-1.549 0 2.5 2.5 0 0 1-3.77-3.248l2.889-4.184A2 2 0 0 1 7 2h10a2 2 0 0 1 1.653.873l2.895 4.192a2.5 2.5 0 0 1-3.774 3.244" />
+    <path d="M4 10.95V19a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8.05" />
+  </Line>
+)
+
+/** A £ note: lucide's `banknote` outline with a pound sign where its circle
+ *  was, filled so it reads as paper crossing the gap, not a hole. */
+export const PoundNote = ({ size = 44 }: Props) => (
+  <svg width={size} height={size * 0.6} viewBox="0 0 40 24" aria-hidden="true">
+    <rect x="1" y="1" width="38" height="22" rx="3.5" fill="var(--sage-wash)" stroke="var(--sage)" strokeWidth="2" />
+    <rect x="4.5" y="4.5" width="31" height="15" rx="2" fill="none" stroke="var(--sage-light)" strokeWidth="1" />
+    <text x="20" y="17" textAnchor="middle" fontSize="13" fontWeight="700" fill="var(--sage)" fontFamily="inherit">£</text>
+  </svg>
+)

@@ -51,8 +51,10 @@ export function FinishShopSheet({
   shop: ShopSnapshot
   /** Swipe, scrim or Escape. Changes nothing at all. */
   onCancel: () => void
-  /** Save, or "Don't price it": the shop really is finished. */
-  onComplete: () => void
+  /** Save, or "Don't price it": the shop really is finished. Save passes the
+   *  completion row's id; "Don't price it" passes null, because nothing went
+   *  to the ledger and so there is nothing to confirm. */
+  onComplete: (completionId: string | null) => void
 }) {
   const { categories, locationOptions, saveShopCompletion } = useListly()
   const householdId = useHouseholdId()
@@ -114,7 +116,7 @@ export function FinishShopSheet({
       spendDate,
       location,
     })
-      .then(onComplete)
+      .then((id) => onComplete(id))
       .catch((e: unknown) => {
         setSaving(false)
         setError(`Couldn't save it: ${e instanceof Error ? e.message : String(e)}`)
@@ -238,7 +240,7 @@ export function FinishShopSheet({
         ) : (
           // Finishes the shop WITHOUT a ledger entry — deliberately distinct
           // from cancelling, which changes nothing.
-          <button className="btn ghost" onClick={onComplete}>
+          <button className="btn ghost" onClick={() => onComplete(null)}>
             Don’t price it
           </button>
         )}

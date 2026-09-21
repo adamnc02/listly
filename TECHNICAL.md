@@ -363,6 +363,32 @@ onto the list, so the normal case stays three.
 - The location picker's bracketed owner name appears only when the household has more than one
   `people` row. The other three fields are written identically whichever way the label renders.
 
+### The confirmation, after Save
+
+`components/ShopConfirmation.tsx`, with its rules in `lib/shopConfirmation.ts`. **Only after Save**
+— never after "Don't price it" and never in a household with no ledger, because nothing went
+anywhere. `Shopping.tsx` mounts it with the id `saveShopCompletion()` now resolves to, and only a
+Save hands one back.
+
+£ notes fly from a wallet (lucide's `wallet`, the icon `shared-finance-ledger`'s nav uses) to a shop,
+one per 1.5s cycle. It flies **at least two, and until the ledger has answered — whichever is
+later** (Adam, 2026-09-21), then morphs into its ending, holds, morphs out and closes. No buttons.
+
+| The completion row comes back with… | Ends on |
+|---|---|
+| `transaction_id` | a sage tick, **"Success"** |
+| `ledger_error` | a red cross, "Couldn't add to the ledger" — the retry banner (§14) is underneath |
+| neither, and the phone is offline (not merely reconnecting) | a clock, "Saved — it'll reach the ledger when you're back online" |
+| neither, after ~10s online | the same clock |
+
+> 🚨 **The tick means the ledger confirmed it, and nothing else.** "Sync complete" is the row
+> coming back down carrying the trigger's answer — **not** the upload queue draining, which only
+> proves the row left the phone. In a shop with no signal the answer can never arrive, so a tick on
+> a timer would be a lie, and the queued ending exists for exactly that. Connection state is read
+> from `powerSyncDb` the same way the sync dot (§18) reads it, so the two cannot disagree.
+> `scripts/verify-shop-confirmation.ts` proves every row of that table, and that no pending state
+> can ever produce a tick.
+
 **What crosses into the ledger, and what does not** — `docs/LEDGER-INTEGRATION.md` is the full
 picture, but the headline: only the amount, date, category, account and the list's *name* reach
 `shared_finance_ledger`. The ticked items are kept in `shop_completions.items_snapshot`, which the

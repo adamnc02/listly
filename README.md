@@ -58,6 +58,11 @@ into another app's schema. Three rules hold it together:
   reach the ledger. The ticked items are kept in `shop_completions.items_snapshot`, which the trigger
   never reads.
 
+After Save, a short confirmation plays — £ notes flying from a wallet to a shop — and ends on a
+tick **only once the ledger has confirmed the transaction**. Offline it ends on "Saved — it'll reach
+the ledger when you're back online" instead, and on a refusal a red cross. A tick on a timer would be
+a lie whenever there is no signal (`TECHNICAL.md` §9).
+
 `docs/LEDGER-INTEGRATION.md` is the full picture, and the page a *ledger* developer should read.
 
 ### Cancelling Finish shop changes nothing, and that is load-bearing.
@@ -120,6 +125,9 @@ npm run build      # tsc -b && vite build
 npm run preview    # serve the built app at /listly/
 npm run lint
 npm run deploy     # builds, then publishes dist/ to the gh-pages branch
+
+# The verify scripts (plain tsx, ✓/✗). Run them all, strictly:
+for f in scripts/verify-*.ts; do TZ=Europe/London npx tsx "$f" || echo "FAIL: $f"; done
 ```
 
 > `npm run deploy` publishes the live site. Per this project's working rules it is **never** run
