@@ -34,7 +34,7 @@ that must not be quietly undone. Start there; this is the map of everything else
 19. [The inert-control rule](#19-the-inert-control-rule)
 20. [Icons and the icon master](#20-icons-and-the-icon-master)
 21. [Build, deploy and environment](#21-build-deploy-and-environment)
-22. [What is not built yet](#22-what-is-not-built-yet)
+22. [Module: Reminders (push only)](#22-module-reminders-push-only)
 
 ---
 
@@ -75,6 +75,7 @@ src/
     DueSoonBanners.tsx    The red banners, on every tab
     LedgerErrors.tsx      "Couldn't add to the ledger — tap to retry"
     AccountModal.tsx      Identity, link code, delete my app data
+    RemindersSection.tsx  Per-device reminder state, devices, the test button
     AuthGate.tsx          Sign-in
     SyncRoot.tsx          Boot and the household guard
     SyncStatusDot.tsx     Is this actually syncing?
@@ -83,6 +84,7 @@ src/
   lib/
     date.ts               A byte-identical copy of the ledger's
     ids.ts  jobs.ts  deviceState.ts  useDragReorder.ts
+    push.ts  pushState.ts  Web Push, the browser half
     supabaseClient.ts
     powersync/            tables · schema · mapping · writes · connector · database
                           household · linking · ledger · useWatchedQuery
@@ -663,14 +665,57 @@ collide with another app's data.
 
 ---
 
-## 22. What is not built yet
+## 22. Module: Reminders (push only)
 
-**Reminders (Phase 5).** The schema is already there — `push_subscriptions` and `reminder_log`
-exist in the `listly` schema and are handled by `erase_my_data()` — but **there is no client-side
-push code in `src/`**: no service worker registration, no `Notification` permission prompt, no
-subscription write. `Job.remind` is stored, enforced and shown, and nothing yet fires against it.
-`VITE_VAPID_PUBLIC_KEY` is reserved for that work. 🚩 **Push only — there is no email fallback** (Adam, 2026-09-21: no
-domain, no paid plan), so a phone without the Home Screen install and permission gets no reminder,
-only the banners below.
+`lib/push.ts`, `lib/pushState.ts`, `components/RemindersSection.tsx` (in the Account sheet) and
+`public/sw.js`. The server half is `silver-octo-invention`: migration `20260921090000` and the
+`listly-reminders` Edge Function — `docs/listly-SUPABASE.md` → Reminders.
 
-The due-soon banners (§13) are the in-app half of the same idea and are complete.
+**What it does (Adam, 2026-09-21):** at **08:00 Europe/London**, every morning from **three days
+before** a job with its bell on is due, **until it is ticked done** — day −3, −2, −1 and the due
+day, never twice in one day. A House job reminds **both** household members; a My job only its
+owner. Overdue jobs are not pushed; the due-soon banners (§13) cover those. A notification opens
+Listly on that job's tab (`?tab=house|mine`; an already-open window is reused via a
+`listly:open` message, because a second window would fight the first for PowerSync's database).
+
+> 🚨 **There is no email fallback.** Dismissed 2026-09-21: no domain, no paid plan, and a free
+> provider without a verified domain delivers only to the account owner, so Ella could never have
+> received one. **So a device that cannot receive push is not reminded at all**, and the
+> Settings section's real job is honesty. `decidePushState()` is the rule, and
+> `scripts/verify-push-state.ts` proves it:
+
+| State | Means | Shown as |
+|---|---|---|
+| `needs-install` | an iPhone/iPad in a Safari tab — **push does not exist there** | the Share → Add to Home Screen → Open as Web App steps |
+| `unsupported` | no service worker / PushManager at all | "this browser can't" |
+| `denied` | the user said no — **iOS can never ask again**; only Settings → Notifications → Listly | how to undo it, and a re-check button |
+| `ask` | never asked | what it is FOR, a warning that the answer sticks, then the button |
+| `off` | allowed, but the server has no row for this device | a Register button |
+| `on` | allowed **and** the server has this device's row | ✓, Turn off, Send me a test reminder |
+
+> 🚨 **`on` needs the SERVER row, not just the browser's subscription.** A row removed from
+> another device, or pruned by the job after a 404/410, leaves the browser subscribed and the phone
+> reminded by nobody. `needs-install` is decided **before** `unsupported`, because in a Safari tab
+> PushManager is absent and the phone would otherwise be told "this browser can't" when three taps
+> would fix it.
+
+**The permission prompt is only ever raised by a tap** on "Turn on reminders". Never on load, never
+in development on a device Adam uses.
+
+**Registration.** `push_subscriptions` is written over REST (it is not synced). Its id is
+`ps_` + a SHA-256 of the endpoint — derived, so registering the same browser twice updates one row
+(MIGRATION-LESSONS §36). **Signing out unregisters the device first** (Adam, 2026-09-21), while the
+session still passes RLS; best effort, it never blocks the sign-out.
+
+**The test button** calls the Edge Function with `{"mode":"test"}` and the user's JWT, and reports
+per device: sent, gone (and removed), or failed.
+
+> 🚨 **`public/sw.js` has no `fetch` handler, and must never get one without a plan.** A caching
+> service worker is how a PWA gets stuck on an old build for ever. This one handles `push` (always
+> showing a notification — iOS revokes permission from a site whose pushes show nothing) and
+> `notificationclick`, and nothing else. It is registered on every boot so a changed `sw.js`
+> reaches every device, with `skipWaiting` + `clients.claim` so it takes over without waiting for
+> the installed app to be fully closed.
+
+**Still to do (Phase 5 tasks, not code):** Ella's phone needs Listly on its Home Screen and
+permission granted from this section — now her only route to a reminder.

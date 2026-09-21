@@ -116,6 +116,21 @@ debugging on "Add list did nothing".
 round `+` add-item button (an `.icon-btn`), so that button carried the class and got no styling at
 all for a week.
 
+### The service worker has no `fetch` handler.
+
+`public/sw.js` exists for push notifications only. A service worker that caches is how a PWA gets
+stuck on an old build permanently — every deploy silently fails to reach the phone. Listly is
+offline-first through PowerSync's local database, not through a cache, so it needs none. **Adding
+a `fetch` handler needs a versioning and update plan first**, tested against upgrading from the
+deployed build.
+
+### Reminders are push only, so Settings must tell the truth per device.
+
+There is no email fallback (Adam, 2026-09-21). A phone that is not on the Home Screen with
+permission granted is simply not reminded, and the Reminders section says so rather than showing a
+button. A device reads "gets reminders" only when the **server** has its registration, never from
+the browser's own subscription alone (`TECHNICAL.md` §22).
+
 ## Running it
 
 ```bash
