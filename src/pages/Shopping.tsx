@@ -5,11 +5,14 @@ import { ItemEditSheet } from '../components/ItemEditSheet'
 import { ManageListsSheet } from '../components/ManageListsSheet'
 import { FinishShopSheet } from '../components/FinishShopSheet'
 import { LedgerErrors } from '../components/LedgerErrors'
+import { ShopConfirmation } from '../components/ShopConfirmation'
 import { Sliders } from '../components/Icons'
 
 export function Shopping() {
   const { visibleLists, addList, finishShop } = useListly()
   const [pricing, setPricing] = useState<ShopSnapshot | null>(null)
+  // The completion row just sent to the ledger, while its confirmation plays.
+  const [confirming, setConfirming] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   const [manageOpen, setManageOpen] = useState(false)
   const [editing, setEditing] = useState<{ listId: string; itemId: string } | null>(null)
@@ -91,13 +94,16 @@ export function Shopping() {
           // 🚨 Cancel changes NOTHING — the ticked items were never deleted.
           onCancel={() => setPricing(null)}
           // Saved, or explicitly finished without pricing: only now do the
-          // ticked items go and the list collapse.
-          onComplete={() => {
+          // ticked items go and the list collapse. Only a Save hands back an
+          // id — "Don't price it" sent nothing, so there is nothing to confirm.
+          onComplete={(completionId) => {
             void finishShop(pricing.listId)
             setPricing(null)
+            if (completionId) setConfirming(completionId)
           }}
         />
       )}
+      {confirming && <ShopConfirmation completionId={confirming} onDone={() => setConfirming(null)} />}
       {editing && (
         <ItemEditSheet
           listId={editing.listId}

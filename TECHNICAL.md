@@ -363,6 +363,32 @@ onto the list, so the normal case stays three.
 - The location picker's bracketed owner name appears only when the household has more than one
   `people` row. The other three fields are written identically whichever way the label renders.
 
+### The confirmation, after Save
+
+`components/ShopConfirmation.tsx`, with its rules in `lib/shopConfirmation.ts`. **Only after Save**
+— never after "Don't price it" and never in a household with no ledger, because nothing went
+anywhere. `Shopping.tsx` mounts it with the id `saveShopCompletion()` now resolves to, and only a
+Save hands one back.
+
+£ notes fly from a wallet (lucide's `wallet`, the icon `shared-finance-ledger`'s nav uses) to a shop,
+one per 1.5s cycle. It flies **at least two, and until the ledger has answered — whichever is
+later** (Adam, 2026-09-21), then morphs into its ending, holds, morphs out and closes. No buttons.
+
+| The completion row comes back with… | Ends on |
+|---|---|
+| `transaction_id` | a sage tick, **"Success"** |
+| `ledger_error` | a red cross, "Couldn't add to the ledger" — the retry banner (§14) is underneath |
+| neither, and the phone is offline (not merely reconnecting) | a clock, "Saved — it'll reach the ledger when you're back online" |
+| neither, after ~10s online | the same clock |
+
+> 🚨 **The tick means the ledger confirmed it, and nothing else.** "Sync complete" is the row
+> coming back down carrying the trigger's answer — **not** the upload queue draining, which only
+> proves the row left the phone. In a shop with no signal the answer can never arrive, so a tick on
+> a timer would be a lie, and the queued ending exists for exactly that. Connection state is read
+> from `powerSyncDb` the same way the sync dot (§18) reads it, so the two cannot disagree.
+> `scripts/verify-shop-confirmation.ts` proves every row of that table, and that no pending state
+> can ever produce a tick.
+
 **What crosses into the ledger, and what does not** — `docs/LEDGER-INTEGRATION.md` is the full
 picture, but the headline: only the amount, date, category, account and the list's *name* reach
 `shared_finance_ledger`. The ticked items are kept in `shop_completions.items_snapshot`, which the
@@ -622,8 +648,8 @@ leading dot when renaming, and Vite then ignores the file with no error at all. 
 
 **Nothing in `.env.local` should ever be a value that matters if seen.** The anon key is public by
 design — RLS protects the data, not the key — and the VAPID *public* key is public by definition.
-The VAPID **private** key and any email API key are Supabase secrets, set in the dashboard, and
-must never reach this repo.
+The VAPID **private** key is a Supabase secret, set in the dashboard, and must never reach this
+repo. (There is no email API key: reminders are push only, decided 2026-09-21.)
 
 `VITE_POWERSYNC_DB_FILENAME` has **no default on purpose**: four apps share the origin
 `adamnc02.github.io`, so they share browser storage, and Listly's local database must be
@@ -643,6 +669,8 @@ collide with another app's data.
 exist in the `listly` schema and are handled by `erase_my_data()` — but **there is no client-side
 push code in `src/`**: no service worker registration, no `Notification` permission prompt, no
 subscription write. `Job.remind` is stored, enforced and shown, and nothing yet fires against it.
-`VITE_VAPID_PUBLIC_KEY` is reserved for that work.
+`VITE_VAPID_PUBLIC_KEY` is reserved for that work. 🚩 **Push only — there is no email fallback** (Adam, 2026-09-21: no
+domain, no paid plan), so a phone without the Home Screen install and permission gets no reminder,
+only the banners below.
 
 The due-soon banners (§13) are the in-app half of the same idea and are complete.
