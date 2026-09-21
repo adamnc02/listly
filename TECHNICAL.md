@@ -45,11 +45,12 @@ Vite · React 19 · TypeScript · Supabase (Auth + Postgres) · PowerSync (offli
 held in one `useState`. **iOS is the target; Android is out of scope.**
 
 ```
-main.tsx
+main.tsx                              + registers public/sw.js (push only, §22)
 └── App.tsx
     └── AuthProvider                  Supabase session
         └── Gate                      session undefined → nothing; null → AuthGate
-            └── SyncRoot              ensure_household → connect → subscribe → the §38 guard
+            └── SyncRoot              ensure_household → schema check → account check →
+                                      subscribe → connect → first sync → the §38 guard
                 └── ListlyProvider    watched queries + narrow SQL writes
                     └── Shell         header · banners · <main> · nav · account sheet
 ```
@@ -69,13 +70,15 @@ src/
     Sheet.tsx             The portal bottom sheet — every overlay uses it
     ShoppingList.tsx      One list card
     FinishShopSheet.tsx   "Price this shop"
+    ShopConfirmation.tsx  Wallet → shop, then the ledger's answer (§9)
     ManageListsSheet.tsx  Every list, hidden ones included
     ItemEditSheet.tsx     Rename / delete / move an item
     JobEditSheet.tsx      Edit a job
     DueSoonBanners.tsx    The red banners, on every tab
     LedgerErrors.tsx      "Couldn't add to the ledger — tap to retry"
     AccountModal.tsx      Identity, link code, delete my app data
-    RemindersSection.tsx  Per-device reminder state, devices, the test button
+    RemindersSection.tsx  Per-device reminder state, devices, the test button (§22)
+    SyncNowSection.tsx    "Sync now" (§18)
     AuthGate.tsx          Sign-in
     SyncRoot.tsx          Boot and the household guard
     SyncStatusDot.tsx     Is this actually syncing?
@@ -84,15 +87,22 @@ src/
   lib/
     date.ts               A byte-identical copy of the ledger's
     ids.ts  jobs.ts  deviceState.ts  useDragReorder.ts
-    push.ts  pushState.ts  Web Push, the browser half
+    push.ts  pushState.ts  Web Push, the browser half (§22)
+    shopConfirmation.ts   When the confirmation stops, and what it ends on (§9)
+    syncHealth.ts         THE answer to "is this syncing?" — dot and panel share it (§18)
+    accountSwitch.ts      keep / clear / adopt the device's data on sign-in (§18)
     supabaseClient.ts
     powersync/            tables · schema · mapping · writes · connector · database
                           household · linking · ledger · useWatchedQuery
-                          describeSyncError · bootLog
+                          describeSyncError · bootLog · useSyncHealth · syncNow
+public/
+  sw.js                   push + notificationclick ONLY — no fetch handler (§22)
 docs/
   ARCHITECTURE.md         The sync layer
   LEDGER-INTEGRATION.md   The bridge
-scripts/print-sync-streams.ts
+scripts/
+  print-sync-streams.ts   The dashboard YAML, generated from tables.ts
+  verify-*.ts             Plain tsx checks, ✓/✗, each headed by the real bug it prevents (§21)
 ```
 
 ---
@@ -113,6 +123,12 @@ prototype's data URI is 27KB of its bulk and would be carried into every build f
 
 **The header carries no date.** Every screen already says what it is, and the due chips carry the
 only dates that matter.
+
+**The tab can be chosen from outside.** A reminder notification opens `…/listly/?tab=house` or
+`?tab=mine`, and `Shell` reads that as its initial tab. If Listly is already open, the service
+worker focuses that window and posts `{type: 'listly:open', url}` instead of opening a second one —
+a second window would fight the first for PowerSync's on-device database, which iOS lets only one
+hold — and `Shell` switches tab on the message (§22).
 
 ### The gate
 
@@ -168,6 +184,7 @@ Any new overlay must respect it, because the nav floats:
 | floating nav | **100** |
 | the sync-error banner | 400 |
 | modal overlays (`.sheet-root`) | **500** |
+| the Finish-shop confirmation (`.confirm-root`) | **500** — never open at the same time as a sheet |
 
 ---
 
@@ -227,6 +244,8 @@ Reads are `useWatchedQuery` over the local PowerSync database, so every one of t
 each sync delivery. Writes are fire-and-forget through a `run()` helper that **logs a failure and
 never silently swallows it**; the mutators that a control waits on (`addList`, `addItem`, `addJob`,
 `saveShopCompletion`) return Promises so the caller can name the failure on screen (§19).
+`saveShopCompletion` resolves to the new completion row's **id** — the one thing the Finish-shop
+confirmation needs to watch for the ledger's answer (§9).
 
 ### The D4 gate
 
@@ -386,8 +405,9 @@ later** (Adam, 2026-09-21), then morphs into its ending, holds, morphs out and c
 > 🚨 **The tick means the ledger confirmed it, and nothing else.** "Sync complete" is the row
 > coming back down carrying the trigger's answer — **not** the upload queue draining, which only
 > proves the row left the phone. In a shop with no signal the answer can never arrive, so a tick on
-> a timer would be a lie, and the queued ending exists for exactly that. Connection state is read
-> from `powerSyncDb` the same way the sync dot (§18) reads it, so the two cannot disagree.
+> a timer would be a lie, and the queued ending exists for exactly that. Connection state comes
+> from the same `powerSyncDb` status the sync dot (§18) reads, so the two cannot disagree about
+> whether the phone is online.
 > `scripts/verify-shop-confirmation.ts` proves every row of that table, and that no pending state
 > can ever produce a tick.
 
@@ -436,6 +456,11 @@ component, on purpose.**
 
 The page is: a heading with "N to do", an add form (name + optional due date), the open jobs sorted
 by `sortOpenJobs`, and a collapsible Done section whose open/closed state is per device.
+
+**The bell is a real reminder now** (Phase 5, §22): with it on, the job is pushed at **08:00 every
+morning from three days before it is due until it is ticked done**. On a House job it reminds
+**both** household members — `remind` is one switch on the job, with no record of who set it; on a
+My job, only its owner.
 
 `components/JobEditSheet.tsx` edits text, due date and reminder. **The reminder checkbox appears
 only when a due date is set, and clearing the date turns the reminder off** — and clearing a due
@@ -497,10 +522,17 @@ What is shown instead is the **signed-in email** — the honest answer to "who a
 free from the session and needing no person row. There is deliberately **no Listly display name or
 profile**: that would be a third identity model alongside the login and the ledger's person rows.
 
-The modal offers: the household's invite code (show / regenerate), Join with a code, Sign out, and
+The modal offers, top to bottom: the signed-in email; the household's invite code (show /
+regenerate); Join with a code; **Reminders** (§22); **Sync now** (§18); Sign out; and
 **Delete my app data** — which also deletes the caller's Listly rows (`my_jobs`,
 `push_subscriptions` and `reminder_log` unconditionally, since they have no `household_id` to
 cascade them; the household tables go with the household when the caller is its only member).
+
+**Signing out** does three things, in this order: warns first if changes are still waiting to
+upload (a different account signing in on this phone would clear them — §18); unregisters this
+device's push subscription while the session can still pass RLS (§22); then signs out, which
+unmounts `SyncRoot` and so disconnects PowerSync. It **does not clear** the device — signing
+straight back in keeps everything, unsent changes included.
 
 Code creation is guarded against React StrictMode's double-invoke: two concurrent calls to
 `create_household_link_code()` race each other on its unique constraint. `linking.ts` also retries
@@ -513,7 +545,9 @@ the loser, so it is belt and braces.
 
 ## 16. Sheets and overlays
 
-`components/Sheet.tsx` is the one implementation, and every overlay uses it.
+`components/Sheet.tsx` is the one implementation, and every **sheet** uses it. The one overlay that
+is not a sheet — the Finish-shop confirmation (§9), a centred window with no buttons — portals to
+`document.body` the same way and sits at the same z-index (500).
 
 > 🚨 **It renders through `createPortal` to `document.body`, from the very first one, and never as
 > a plain `fixed`/`absolute` div inside the page.** Page components live inside a scrolling
@@ -523,7 +557,10 @@ the loser, so it is belt and braces.
 > overflow or stacking context can reach it. This took three attempts to establish.
 
 The sheet also: closes on **Escape**, closes on a tap of the dimmed area, and **locks `body`
-scrolling while it is up**, restoring the previous value on unmount.
+scrolling while it is up**, restoring the previous value on unmount. 🚨 `.sheet` is
+`overflow-x: hidden`, and anything long inside one must wrap (`overflow-wrap: anywhere`, and
+`min-width: 0` on flex children): a sheet must only ever scroll up and down (Adam, 2026-09-21 — the
+Sync check scrolled sideways on a long server URL).
 
 ---
 
@@ -680,7 +717,31 @@ npm run preview    # serves the built app at /listly/
 npm run lint       # oxlint
 npm run deploy     # builds, then publishes dist/ to gh-pages — the LIVE site
 npx tsx scripts/print-sync-streams.ts   # the dashboard YAML, generated from tables.ts
+
+# Every verify script, strictly — a non-zero exit, a ✗ or a FAIL line all fail:
+for f in scripts/verify-*.ts; do TZ=Europe/London npx tsx "$f" || echo "FAIL: $f"; done
 ```
+
+**The verify scripts** are the house testing idiom: plain `tsx`, printing ✓/✗, each headed by the
+real bug it prevents and each carrying a **control** that reproduces the old, wrong behaviour — a
+check that was always going to pass proves nothing. The logic they test is kept pure for exactly
+that reason (`lib/shopConfirmation.ts`, `pushState.ts`, `syncHealth.ts`, `accountSwitch.ts`).
+
+| Script | Proves |
+|---|---|
+| `verify-shop-confirmation.ts` | the tick only ever means the ledger confirmed it (§9) |
+| `verify-push-state.ts` | a device reads "gets reminders" only with a server row (§22) |
+| `verify-sync-health.ts` | the dot and the panel's one answer; a stale upload error is not a failure (§18) |
+| `verify-account-switch.ts` | a different account clears the device; Sync now waits for both directions (§18) |
+
+**UI changes are checked by rendering the real components**, not by reading them: a throwaway Vite
+harness in the scratch directory mounts the component with its data layer mocked (aliased by
+path), headless Chromium screenshots each state at 390px, and `scrollWidth` vs `clientWidth` is
+measured rather than eyeballed. The harness is deleted afterwards; this paragraph is the record of
+the method. It caught three real bugs on 2026-09-21 — two layout overflows in the Reminders
+section, and the Sync check telling an offline phone "Something needs fixing". 🚩 Alias
+relative imports too (`./database`, not only `…/lib/powersync/database`): a missed one silently
+loads the REAL module, and the render looks like an app bug when it is the harness.
 
 > `npm run deploy` publishes the live site and is **never** run without being asked for in so many
 > words. **There is no CI**: the `gh-pages` branch is whatever the last `npm run deploy` pushed,
@@ -695,6 +756,12 @@ leading dot when renaming, and Vite then ignores the file with no error at all. 
 design — RLS protects the data, not the key — and the VAPID *public* key is public by definition.
 The VAPID **private** key is a Supabase secret, set in the dashboard, and must never reach this
 repo. (There is no email API key: reminders are push only, decided 2026-09-21.)
+
+> 🚨 **Deploying a build that changes `public/sw.js`.** GitHub Pages serves it with
+> `cache-control: max-age=600`, but a service worker's own update check bypasses the HTTP cache, and
+> `skipWaiting` + `clients.claim` let a new worker take over at once. Because it has no `fetch`
+> handler, **no deploy can ever be held back by it** — which is the thing to re-check (§22's test)
+> before anyone adds one.
 
 `VITE_POWERSYNC_DB_FILENAME` has **no default on purpose**: four apps share the origin
 `adamnc02.github.io`, so they share browser storage, and Listly's local database must be
@@ -759,6 +826,26 @@ per device: sent, gone (and removed), or failed.
 > `notificationclick`, and nothing else. It is registered on every boot so a changed `sw.js`
 > reaches every device, with `skipWaiting` + `clients.claim` so it takes over without waiting for
 > the installed app to be fully closed.
+
+### The server half, in one paragraph
+
+An hourly `pg_cron` job (`0 * * * *` UTC) calls the `listly-reminders` Edge Function.
+`listly.claim_due_reminders()` answers only in the **08 hour, London time**, and writes each
+`reminder_log` row **before** anything is sent, keyed
+`'<job_table>:<job_id>:<due_date>:<user_id>:<london_send_date>'` — the user so both household
+members are reminded, the send date so it repeats each morning, and claim-before-send so a retry
+or an overlapping run never double-sends. The function sends Web Push (VAPID, aes128gcm) and
+deletes a subscription the push service reports as gone (404/410). Each day's notification carries
+its own `tag`, so iOS shows a fresh one each morning rather than silently replacing yesterday's.
+The test path needs the caller's JWT and refuses without one (401). `supabase/functions/` and
+`docs/listly-SUPABASE.md` in `silver-octo-invention` have the full detail.
+
+**Checking it live**, as the read-only `claude_ro` role:
+`silver-octo-invention/supabase/checks/20260921_listly_reminders_verify.sql` (the functions and
+rules, 20 rows) and `…_cron_verify.sql` (did the schedule fire, and what did the function answer —
+4 rows). 🚨 The second reads `net._http_response`, **not** `cron.job`: pg_cron puts RLS on its own
+tables, so any role but the job's owner sees none of them. The first scheduled run, 2026-09-21
+07:00 UTC, answered HTTP 200.
 
 **Still to do (Phase 5 tasks, not code):** Ella's phone needs Listly on its Home Screen and
 permission granted from this section — now her only route to a reminder.
