@@ -156,6 +156,7 @@ app's data.
 
 | Document | Holds |
 |---|---|
+| `TECHNICAL.md` | The module-by-module reference: the shell, the data layer, every screen and sheet, and the rules each one encodes. |
 | `docs/ARCHITECTURE.md` | The sync layer: the two Sync Streams, the `lst_`/`lst_ref_` prefixes and why, upload ordering, the mapping boundary. |
 | `docs/LEDGER-INTEGRATION.md` | **The page a ledger developer should read.** The gate, the trigger, the field mapping, and the blast-radius table. |
 | `silver-octo-invention/docs/listly-SUPABASE.md` | The schema, RLS and functions, plus a generated ERD. |
