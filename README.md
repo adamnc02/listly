@@ -152,7 +152,7 @@ VITE_VAPID_PUBLIC_KEY=<public half of the VAPID pair>
 
 **Nothing in `.env.local` should ever be a value that matters if seen.** The anon key is public by
 design — RLS protects the data, not the key — and the VAPID *public* key is public by definition. The
-VAPID **private** key and any email API key are Supabase secrets, set in the dashboard, and must never
+VAPID **private** key is a Supabase secret, set in the dashboard, and must never
 reach this repo.
 
 `VITE_POWERSYNC_DB_FILENAME` has **no default on purpose**. Four apps share the origin

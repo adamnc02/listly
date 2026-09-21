@@ -648,8 +648,8 @@ leading dot when renaming, and Vite then ignores the file with no error at all. 
 
 **Nothing in `.env.local` should ever be a value that matters if seen.** The anon key is public by
 design — RLS protects the data, not the key — and the VAPID *public* key is public by definition.
-The VAPID **private** key and any email API key are Supabase secrets, set in the dashboard, and
-must never reach this repo.
+The VAPID **private** key is a Supabase secret, set in the dashboard, and must never reach this
+repo. (There is no email API key: reminders are push only, decided 2026-09-21.)
 
 `VITE_POWERSYNC_DB_FILENAME` has **no default on purpose**: four apps share the origin
 `adamnc02.github.io`, so they share browser storage, and Listly's local database must be
@@ -669,6 +669,8 @@ collide with another app's data.
 exist in the `listly` schema and are handled by `erase_my_data()` — but **there is no client-side
 push code in `src/`**: no service worker registration, no `Notification` permission prompt, no
 subscription write. `Job.remind` is stored, enforced and shown, and nothing yet fires against it.
-`VITE_VAPID_PUBLIC_KEY` is reserved for that work.
+`VITE_VAPID_PUBLIC_KEY` is reserved for that work. 🚩 **Push only — there is no email fallback** (Adam, 2026-09-21: no
+domain, no paid plan), so a phone without the Home Screen install and permission gets no reminder,
+only the banners below.
 
 The due-soon banners (§13) are the in-app half of the same idea and are complete.
