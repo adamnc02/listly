@@ -165,8 +165,9 @@ export async function insertShopCompletion(
   await powerSyncDb.execute(
     `INSERT INTO lst_shop_completions
        (id, household_id, list_id, list_name, completed_at, amount, spend_date,
-        category_id, payment_method, location, owner_id, pot_id, items_snapshot)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'card', ?, ?, ?, ?)`,
+        category_id, payment_method, location, owner_id, pot_id, items_snapshot,
+        rounded_from, rounding_pot_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'card', ?, ?, ?, ?, ?, ?)`,
     [
       id,
       householdId,
@@ -185,6 +186,12 @@ export async function insertShopCompletion(
       // recorded to shared-ledger-finance, but would be handy to have that
       // information in listly's tables". The trigger never reads it.
       toDbId(draft.itemsSnapshot),
+      // PROMPT-05. 🚨 The PAIR, decided and DISPLAYED in the sheet before
+      // Save — never recomputed server-side. Null on every shop that did
+      // not round, which is most of them. `draft.amount` is already the
+      // rounded figure when these are set.
+      draft.roundedFrom,
+      toDbId(draft.roundingPotId ?? ''),
     ],
   )
   return id

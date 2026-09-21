@@ -6,6 +6,7 @@ import { assertListlySchemaReachable } from '../lib/supabaseClient'
 import { recordBootStep, clearBootLog, readBootLog, keepBootLogForNextStart } from '../lib/powersync/bootLog'
 import { describeSyncError } from '../lib/powersync/describeSyncError'
 import { accountSwitch } from '../lib/accountSwitch'
+import { clearRoundUpCache } from '../lib/roundUpCache'
 
 /**
  * Boots sync, and holds the household guard.
@@ -261,6 +262,11 @@ export function SyncRoot({ children }: { children: ReactNode }) {
         } else if (action === 'clear') {
           await withTimeout(powerSyncDb.disconnectAndClear(), 20000, 'Clearing the previous account')
           forgetSynced(userId)
+          // 🚨 PROMPT-05. The previous account's remembered "rounding is on,
+          // into pot X" must go with its data. A new account has no business
+          // inheriting a round-up answer for a household it may not be in,
+          // and the safe state for an unknown person is simply off.
+          clearRoundUpCache()
           rememberUser(userId)
           recordBootStep('new account on this device', 'ok', 'previous account’s local data cleared')
         } else {

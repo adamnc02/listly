@@ -104,6 +104,14 @@ export interface LocationOption {
   location: 'joint' | 'personal' | 'pot'
   /** '' for joint — a joint expense stores no owner (§8.2c). */
   ownerId: string
+  /**
+   * The owner's first name, for copy that has to name a person — the
+   * round-up step's "Ella's Coin Jar". 🚨 Follows the SAME rule as the
+   * bracket in `label`: '' in a one-person household, where the name is
+   * noise and the jar is simply "your Coin Jar". Never used for
+   * attribution — that is `ownerId`.
+   */
+  ownerName: string
   /** '' unless `location` is 'pot'. */
   potId: string
 }
@@ -115,7 +123,21 @@ export interface ShopCompletionDraft {
   /** Kept in Listly only. The ledger trigger never reads it. */
   itemsSnapshot: string
   categoryId: string
+  /**
+   * What is BOOKED. Already the ROUNDED figure (£8.00) on a shop that
+   * rounded — the same convention the ledger stores, so every reader of
+   * transactions.amount is correct untouched (APP-KNOWLEDGE §1.19d).
+   */
   amount: number
   spendDate: IsoDate
   location: LocationOption
+  /**
+   * PROMPT-05. The real price (£7.50) when this shop rounded up, and the
+   * Coin Jar the uplift feeds. 🚨 BOTH, or NEITHER — both tables carry a
+   * both-or-neither CHECK, and a violated CHECK is a write PowerSync
+   * silently discards (§27). `shopRoundUpFields()` returns the pair so no
+   * caller can write half of it.
+   */
+  roundedFrom: number | null
+  roundingPotId: string | null
 }

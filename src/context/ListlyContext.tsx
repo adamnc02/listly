@@ -12,6 +12,7 @@ import {
   withDoneOpen,
   withListOpen,
 } from '../lib/deviceState'
+import { loadRoundUpCache, pruneRoundUpCache, saveRoundUpCache } from '../lib/roundUpCache'
 import { useHouseholdId } from '../components/SyncRoot'
 import { useAuth } from './AuthContext'
 import {
@@ -171,6 +172,17 @@ export function ListlyProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     saveDeviceState(device)
   }, [device])
+
+  // PROMPT-05. The same housekeeping for the remembered round-up answers:
+  // drop anyone who is no longer a person in this household, so a removed
+  // person cannot carry a stale "rounding is on, into pot X" around forever.
+  // Keyed on the people the LOCATION PICKER knows about, which is the same
+  // `lst_ref_people` mirror the answers were fetched for.
+  useEffect(() => {
+    const personIds = locationOptions.filter((o) => o.ownerId).map((o) => o.ownerId)
+    if (personIds.length === 0) return
+    saveRoundUpCache(pruneRoundUpCache(loadRoundUpCache(), personIds))
+  }, [locationOptions])
 
   /**
    * A default list always shows, even when empty. A non-default list hides

@@ -132,7 +132,7 @@ export function useLocationOptions(userId: string | null): LocationOption[] {
     const options: LocationOption[] = []
 
     if (jointRows.length > 0) {
-      options.push({ key: 'joint', label: 'Joint account', location: 'joint', ownerId: '', potId: '' })
+      options.push({ key: 'joint', label: 'Joint account', location: 'joint', ownerId: '', potId: '', ownerName: '' })
     }
 
     for (const p of ordered) {
@@ -145,6 +145,9 @@ export function useLocationOptions(userId: string | null): LocationOption[] {
         location: 'personal',
         ownerId: str(p.id),
         potId: '',
+        // Same rule as the bracket above: named only when there is more
+        // than one person to tell apart.
+        ownerName: showOwner ? str(p.name) : '',
       })
     }
 
@@ -161,6 +164,7 @@ export function useLocationOptions(userId: string | null): LocationOption[] {
         location: 'pot',
         ownerId,
         potId: str(pot.id),
+        ownerName: showOwner ? (nameOf.get(ownerId) ?? '') : '',
       })
     }
 
