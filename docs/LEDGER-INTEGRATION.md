@@ -33,6 +33,9 @@ Every row is something a change on the ledger side could break with no error any
 | `people` (+ `linked_user_id`) | Read-only via `lst_ref_people`. The D4 gate counts it; the owner picker names it | Rename → the gate misreads and the ledger step vanishes or appears wrongly |
 | `categories` (+ the `@<household_id>` suffix) | Read via `lst_ref_categories`; the id is passed through **verbatim** | Changing the suffix convention → Listly writes transactions with unresolvable categories |
 | `pots`, `savings_pots`, `joint_account` | Read for the location picker. The **absence** of a `joint_account` row is meaningful | Rename → pickers empty, no error |
+| `pay_cycles.round_up_enabled` / `round_up_effective_from`, `pots.is_coin_jar` | Read by `round_up_state_for()`, called once per Current Account shop so Listly can round at pick time | Rename → the RPC errors, Listly falls back to its cached answer and then to "off": shops silently stop rounding |
+| `round_up_state_for(text, date)` | 🚨 **Added for Listly** (`20260921220000`). The only ledger fact Listly cannot get from its own mirror | Signature change → the same silent stop |
+| `transactions.rounded_from` / `rounding_pot_id` | 🚨 Listly now writes these too, **already set**. `amount` is already the rounded figure | The ledger app **re-rounding** a row that arrives with `rounded_from` set takes £9.00 out for a £7.50 shop |
 | `transactions` | 🚨 **This table has a SECOND WRITER.** Listly's trigger inserts into it | A new CHECK value or a dropped column → `23514`/`42703`, caught by the trigger and shown as `ledger_error`, but the shop is not booked |
 | `powersync` publication, `powersync_role` | Shared by four apps | A second one → breaks everything (§6) |
 | Sync Stream output names | `lst_*` / `lst_ref_*` must not collide with `sfl_*` or personal-f's bare names | A collision merges two apps' rows into one local table, silently (§32) |
@@ -105,6 +108,7 @@ would need a second UPDATE, which is itself an upload.
 | `location` | `coalesce(new.location, 'joint')`. Never `'savings'` |
 | `owner_id` | `new.owner_id`, **null when `location = 'joint'`** |
 | `pot_id` | only when `location = 'pot'`. `savings_pot_id` always null |
+| `rounded_from`, `rounding_pot_id` | `new.rounded_from` / `new.rounding_pot_id`, **carried verbatim** — and dropped unless `location = 'personal'` |
 | `person_id`, `position`, everything else | `null` |
 
 Before inserting it checks household membership. RLS already enforces that on `shop_completions`;
@@ -150,6 +154,39 @@ re-writes `amount` to the value it already holds — but PowerSync PATCHes only 
 *genuinely changed*, so what reaches Postgres is `set ledger_error = null` and nothing else. A
 trigger scoped to `amount` alone would never fire, and Retry would clear the warning while booking
 nothing. Nothing else ever writes that column.
+
+### Round-ups: decided in Listly, carried by the trigger
+
+**Live since `20260921220000`.** A £7.50 Current Account shop is booked as **£8.00** with
+`rounded_from = 7.50`, and the 50p funds the **owner's** Coin Jar. Until then, Listly's insert did
+not name those columns at all, so a personal card shop satisfied `shouldRoundUp` **exactly and was
+silently never rounded**: the same shop was £8.00 with 50p in the jar from the ledger app, and £7.50
+with nothing from Listly (found by Adam, 2026-09-21). Only **personal** shops were affected, and
+joint is the default.
+
+🚨 **The arithmetic happens in Listly, at pick time, in front of the person. The trigger carries and
+computes nothing.** Two consequences a later session must not reverse:
+
+- **There is no rounding engine in SQL**, and anything that moves the decision into the trigger
+  re-introduces one — along with the possibility of a booked row that contradicts the screen.
+- **The two apps agree about the purchase.** Listly stores and displays both figures, so Listly says
+  "£7.50, rounded to £8.00" and the ledger says `amount 8.00, roundedFrom 7.50`.
+
+🚨 **The ledger app must never re-round a bridge row.** It arrives with `roundedFrom` set and
+`amount` already at £8.00; rounding it again takes £9.00 out for a £7.50 shop
+(`APP-KNOWLEDGE.md §1.19d`). `mapping.ts` already reads the pair correctly and `potBalanceAsOf`
+already folds the uplift into the jar, so **no ledger app code change was needed, and none was
+made.**
+
+🚨 **A BACKDATED Listly shop does not round** (Adam, 2026-09-21). `round_up_state_for` answers for
+one date against the *current* rule and deliberately does not walk `round_up_history` — a second
+implementation of `roundUpEnabledOn` in SQL is exactly the thing that drifts silently. This is a
+deliberate limitation, visible in the flow (change the date and the step disappears), not a bug. A
+backdated expense entered **in the ledger app** still rounds on its own date.
+
+**Whose jar:** the `owner_id` of the **picked location**, never the signed-in user. In a two-person
+household Ella's Current Account shop rounds into **Ella's** jar, gated on **her** switch. Joint and
+pot shops never round, and the trigger drops a pair that somehow arrives on one.
 
 ### What is kept in Listly and never sent
 

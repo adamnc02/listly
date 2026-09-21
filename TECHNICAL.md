@@ -345,8 +345,9 @@ its box ticks it.
 ## 9. Module: Finish shop
 
 `components/FinishShopSheet.tsx`. Three steps — **amount**, **date**, **location** — then Save. A
-list with no category gets a fourth step at the **front**, once ever, and the answer is saved back
-onto the list, so the normal case stays three.
+list with no category gets a step at the **front**, once ever, and the answer is saved back onto the
+list, so the normal case stays three. A **round-up** step is appended at the **end**, and only when
+rounding would really apply (§9a).
 
 > 🚨 **Most of a transaction is not a decision anyone wants to make at the till.** `type` is always
 > expense, `direction` always out, `payment_method` always card, `note` is the list name verbatim,
@@ -415,6 +416,70 @@ later** (Adam, 2026-09-21), then morphs into its ending, holds, morphs out and c
 picture, but the headline: only the amount, date, category, account and the list's *name* reach
 `shared_finance_ledger`. The ticked items are kept in `shop_completions.items_snapshot`, which the
 trigger never reads.
+
+### 9a. The round-up step
+
+`lib/roundUp.ts` (the rules), `lib/roundUpCache.ts` (the last known answer),
+`lib/powersync/roundUpState.ts` (the RPC and its hook). Live since `20260921220000`.
+
+A **£7.50 Current Account shop is booked as £8.00**, remembering the real price, and the 50p funds
+that person's Coin Jar in the ledger — the same thing the ledger's own entry flow does. Before this,
+Listly's bridge did not write those columns at all, so a personal card shop satisfied the ledger's
+rounding predicate **exactly and was silently never rounded** (Adam, 2026-09-21). Joint is the
+default, which is why nobody noticed.
+
+> 🚨 **The decision is made here, at pick time, in front of the person — never in the trigger.**
+> Adam, 2026-09-21: *"as soon as the location is picked, if the value is not a whole number and the
+> location is current account, check if rounding is on, and apply it, and add the step to the picker
+> flow to match transactions entries."* The trigger **carries** what this step displayed and
+> computes nothing, so the booked row can never contradict the screen that was tapped.
+
+**When the step appears** (`roundUpApplies`) — all of these, or it shows nothing at all:
+
+| Clause | Why |
+|---|---|
+| `location === 'personal'` | A joint or pot shop never rounds. `type: expense` and `payment_method: card` are hard-coded in this app, so two of the ledger's five predicate clauses are satisfied by construction |
+| the uplift is > 0 | An **exact pound** does not round — `Math.ceil` returns the same pound. The `round2` first is load-bearing: a `7.500000000000001` must not round to £9 |
+| `spendDate === today` | 🚨 A **backdated** shop does not round, deliberately — see below |
+| rounding is on for the **owner** of the picked location, and they have a Coin Jar | 🚨 The owner, **never the signed-in user**: Ella's Current Account shop rounds into **Ella's** jar, gated on **her** switch |
+
+> 🚨 **An always-present step that sometimes says "not rounding" would be worse than no step.** The
+> step appearing and disappearing as the location or date changes *is* the feature telling the
+> truth.
+
+**The backdating limitation is deliberate.** Answering "was rounding on *then*" needs the ledger's
+dated on/off history walked (`roundUpEnabledOn`, and `APP-KNOWLEDGE.md §1.19f` for why its start
+date is load-bearing). Re-implementing that walk in SQL would be a second copy of a subtle rule,
+free to drift silently. Adam, 2026-09-21: a backdated Listly shop simply does not round. Change the
+date away from today and the step disappears — visibly, not silently. A backdated expense entered
+**in the ledger app** still rounds on its own date, as it always has.
+
+**Where the answer comes from.** The switch lives in `shared_finance_ledger.pay_cycles`, which
+Listly does not sync — replicating a household's whole financial configuration into a shopping app
+to answer one yes/no question is the wrong trade. One read-only RPC,
+`round_up_state_for(person, date)`, answers it; it is household-scoped server-side and returns
+`enabled = false` rather than a jarless "on".
+
+> 🚨 **And it is CACHED per person on the phone**, because Finish shop has to work standing in a
+> shop with no signal — the reason every other picker reads a `lst_ref_` mirror. Offline, the step
+> still appears and the shop still rounds, from the last known answer (Adam, 2026-09-21).
+> **An empty, stale, corrupt or unwritable cache always reads as "off"**: a shop that does not round
+> is visible and fixable, while a shop that rounds into a jar that is not there is a 23514 the
+> connector discards silently and the shop is gone (§27). The cache is cleared when a different
+> account signs in, and pruned of people who leave the household.
+
+**What is stored.** `shopRoundUpFields()` returns `amount`, `roundedFrom` and `roundingPotId`
+**together**, so no caller can write half a pair — both tables carry a both-or-neither CHECK, and a
+violated CHECK under PowerSync is a write discarded with no error.
+
+**"Leave it at £7.50" needs no stored flag**, unlike the ledger's `round_up_skipped`. The ledger
+recomputes rounding every time a row is saved, so an opt-out there has to survive an edit
+(`APP-KNOWLEDGE.md §1.19d-2`); a Listly completion is written once and never recomputed. Nothing to
+reconstruct, so nothing to store.
+
+`scripts/verify-shop-round-up.ts`, `verify-shop-completion-mapping.ts` and
+`verify-round-up-cache.ts` cover the rules, the journey into the ledger row, and every way the cache
+can fail.
 
 ---
 

@@ -65,6 +65,27 @@ a lie whenever there is no signal (`TECHNICAL.md` §9).
 
 `docs/LEDGER-INTEGRATION.md` is the full picture, and the page a *ledger* developer should read.
 
+### A Current Account shop rounds up, and Listly decides it — not the database.
+
+A £7.50 Current Account shop is booked as **£8.00**, remembering the real price, and the 50p funds
+that person's Coin Jar in the ledger — the same thing the ledger's own entry does. Three rules:
+
+- **The person sees it before the shop is booked.** A round-up step appears in Finish shop, showing
+  the real price, the rounded figure and where the difference goes. The trigger **carries** those
+  values and computes nothing, so the booked row cannot contradict the screen that was tapped.
+- **It appears only when it really applies** — a Current Account shop, dated today, not already a
+  whole pound, for a person whose round-ups are on and who has a Coin Jar. Otherwise it shows
+  nothing at all. 🚨 It is the **owner of the picked account's** switch and jar, never the
+  signed-in user's.
+- 🚨 **A backdated shop does not round, deliberately.** Answering "was rounding on *then*" would
+  mean a second copy of the ledger's dated on/off walk living in SQL, free to drift. Change the date
+  away from today and the step disappears — visibly. A backdated expense entered *in the ledger app*
+  still rounds on its own date.
+
+The switch itself is not synced to Listly; one read-only RPC answers it, and the answer is
+remembered per person so Finish shop still works with no signal. Anything unknown reads as "off".
+`TECHNICAL.md` §9a.
+
 ### Cancelling Finish shop changes nothing, and that is load-bearing.
 
 Nothing is deleted until the outcome is known — Save and "Don't price it" clear the ticked items,
