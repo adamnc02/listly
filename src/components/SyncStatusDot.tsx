@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { SyncDiagnostics } from './SyncDiagnostics'
 import { describeSyncError } from '../lib/powersync/describeSyncError'
-import { powerSyncDb } from '../lib/powersync/database'
+import { useSyncHealth } from '../lib/powersync/useSyncHealth'
 
 /**
  * A one-glance answer to "is this actually syncing?".
@@ -15,14 +15,18 @@ import { powerSyncDb } from '../lib/powersync/database'
  * silent, and an app that looks fine while never syncing is the worst of
  * them.
  *
- * So the state is shown, not inferred:
- *   connected + synced  → a quiet dot, no text (the normal case)
- *   downloading/uploading → "Syncing…"
+ * So the state is shown, not inferred — by lib/syncHealth.ts, which the Sync
+ * check panel shares:
+ *   synced, nothing waiting → a quiet dot, no text (the normal case)
+ *   downloading/uploading/changes waiting → "Syncing…"
  *   not connected, HAS synced before → "Offline" (which is FINE — this app is
  *                         built for a shop with no signal; the queue drains
  *                         later, and there is local data to work from)
- *   not connected, NEVER synced → "Connecting…", never "Offline"
- *   connected, never synced → "Connecting…"
+ *   never synced, or reconnecting → "Connecting…", never "Offline"
+ *   the server refusing, or changes waiting that keep failing → "Not syncing"
+ *
+ * 🚨 An upload error with NOTHING waiting is history, not a failure — see
+ * lib/syncHealth.ts for why PowerSync leaves one lying around.
  *
  * 🚩 That "never synced" distinction was added 2026-09-20 after Adam signed
  * in on the deployed build and got an empty app badged "Offline" while the
@@ -34,59 +38,36 @@ import { powerSyncDb } from '../lib/powersync/database'
  * sign-in, sync is genuinely not working, whatever the console says.
  */
 export function SyncStatusDot() {
-  const [status, setStatus] = useState(() => powerSyncDb.currentStatus)
   const [open, setOpen] = useState(false)
+  // 🚨 The SAME rule the Sync check panel uses (lib/syncHealth.ts), so the
+  // header and the panel can never disagree again. Adam, 2026-09-21: the dot
+  // said "Sync failed" while every check in the panel was green — a stale
+  // upload error with nothing waiting to upload.
+  const { facts, health } = useSyncHealth()
 
-  useEffect(() => {
-    const off = powerSyncDb.registerListener({
-      statusChanged: (s) => setStatus(s),
-    })
-    return () => off()
-  }, [])
+  const colour =
+    health.tone === 'problem'
+      ? 'var(--red)'
+      : health.tone === 'offline'
+        ? 'var(--muted)'
+        : health.tone === 'connecting'
+          ? 'var(--brown-2)'
+          : 'var(--sage)'
 
-  const connected = status?.connected ?? false
-  const connecting = status?.connecting ?? false
-  const synced = status?.hasSynced ?? false
-  const busy = (status?.downloading ?? false) || (status?.uploading ?? false)
-  // 🚨 The field that actually says WHY. Without it, "Offline" is
-  // indistinguishable from "the server refused us", which is exactly the
-  // ambiguity that cost time on 2026-09-20.
-  const err = status?.downloadError ?? status?.uploadError
-
-  let label: string | null = null
-  let colour = 'var(--sage)'
-  if (err) {
-    label = 'Sync failed'
-    colour = 'var(--red)'
-  } else if (connecting && !connected) {
-    label = 'Connecting…'
-    colour = 'var(--brown-2)'
-  } else if (!connected) {
-    // 🚨 "Offline" is only honest once this device has data of its own.
-    label = synced ? 'Offline' : 'Connecting…'
-    colour = synced ? 'var(--muted)' : 'var(--brown-2)'
-  } else if (busy) {
-    label = 'Syncing…'
-  } else if (!synced) {
-    label = 'Connecting…'
-    colour = 'var(--brown-2)'
-  }
-
-  const title = [
-    err ? `Sync error: ${describeSyncError(err)}` : null,
-    status?.lastSyncedAt
-      ? `Last synced ${status.lastSyncedAt.toLocaleTimeString('en-GB')}`
-      : 'Not synced yet',
-    `connected=${connected} connecting=${connecting} hasSynced=${synced}`,
-  ]
-    .filter(Boolean)
-    .join(' · ')
-
-  // One line in the console on every status change, so a failure leaves a
-  // trail even if nobody is looking at the header at the time.
+  // One line in the console whenever an error appears — including a stale
+  // one the dot deliberately does not show — so it still leaves a trail.
+  const err = facts.downloadError ?? facts.uploadError
   useEffect(() => {
     if (err) console.error('[listly] sync status error:', err)
   }, [err])
+
+  const title = [
+    health.headline,
+    err ? `Last error: ${describeSyncError(err)}` : null,
+    facts.lastSyncedAt ? `Last synced ${facts.lastSyncedAt.toLocaleTimeString('en-GB')}` : 'Not synced yet',
+  ]
+    .filter(Boolean)
+    .join(' · ')
 
   // Tapping it runs the checks. Nobody should have to read a console to
   // find out why their shopping list is not syncing.
@@ -96,10 +77,10 @@ export function SyncStatusDot() {
         className="sync-dot"
         title={title}
         onClick={() => setOpen(true)}
-        aria-label={label ? `Sync: ${label}. Tap to check.` : 'Sync is working. Tap to check.'}
+        aria-label={health.label ? `Sync: ${health.label}. Tap to check.` : 'Sync is working. Tap to check.'}
       >
         <span className="dot" style={{ background: colour }} />
-        {label && <span>{label}</span>}
+        {health.label && <span>{health.label}</span>}
       </button>
       {open && <SyncDiagnostics onClose={() => setOpen(false)} />}
     </>

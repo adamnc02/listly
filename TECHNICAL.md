@@ -570,22 +570,37 @@ midpoint of its neighbours, and **a delete never renumbers**.
 > console noise is exactly how this workstream has repeatedly lost time:** the whole family of
 > failures here is silent, and an app that looks fine while never syncing is the worst of them.
 
-The state is **shown, not inferred**:
+The state is **shown, not inferred** — by `lib/syncHealth.ts`, which the dot and the Sync check
+panel **share**, so they cannot disagree:
 
-| State | Shows |
-|---|---|
-| connected + synced | a quiet dot, no text (the normal case) |
-| downloading / uploading | "Syncing…" |
-| not connected, **has** synced before | "Offline" — which is **fine**: this app is built for a shop with no signal, the queue drains later, and there is local data to work from |
-| not connected, **never** synced | "Connecting…", never "Offline" |
-| connected, never synced | "Connecting…" |
+| State | Dot shows | Panel says |
+|---|---|---|
+| synced, nothing waiting | a quiet dot, no text (the normal case) | "Everything is synced · Last synced at 08:14" |
+| downloading / uploading / changes waiting | "Syncing…" | "Sending 2 changes." |
+| not connected, **has** synced before | "Offline" | "Offline — that's fine", and how many changes will send when there's signal. **Fine**: this app is built for a shop with no signal |
+| never synced, or reconnecting | "Connecting…", never "Offline" | "Getting your lists for the first time on this phone." |
+| the server refusing, or changes waiting that keep failing | "Not syncing" (red) | what is wrong, what to do, and that nothing is lost |
+
+> 🚨 **An upload error with NOTHING waiting is history, not a failure** (Adam, 2026-09-21: the dot
+> said "Sync failed" while every check was green). Read in the PowerSync SDK: `downloadError` is
+> cleared on every completed sync, but `uploadError` only after an upload **succeeds** — so a
+> hiccup on the "queue empty, ask for a checkpoint" step leaves it set with nothing left to upload,
+> for as long as the app is open. `useSyncHealth()` counts the upload queue
+> (`getUploadQueueStats()`, on every status change and every 10s) and an upload error counts only
+> while that count is above zero. `scripts/verify-sync-health.ts` reproduces the screenshot.
 
 > That "never synced" distinction matters: signing in on the deployed build and getting an empty
 > app badged "Offline" while the first download was still in flight is misleading. **"Offline"
 > means "working from local data" — and before a first sync there IS no local data.**
 
-`components/SyncDiagnostics.tsx` is the "why not?" panel behind the dot: a checklist covering
-sign-in, the household, the connection, the subscriptions and the table contents.
+`components/SyncDiagnostics.tsx` is the "why not?" panel behind the dot. **The answer comes first,
+in plain words** — from `syncHealth()`, or from the first failed active check (sign-in, token,
+server reachable, server accepts the sign-in) unless the phone is simply offline. Everything else
+is under **Details for troubleshooting**, closed by default: the checks, the live state (connected,
+last synced, changes waiting, any error — a stale one labelled "Earlier sync hiccup"), the streams
+and the startup steps. Built for someone who only wants "is it OK?", still complete for a
+screenshot. 🚨 Nothing in it may widen the sheet: long values wrap (`.diag`), the server is shown
+by host, and `.sheet` is `overflow-x: hidden` (Adam, 2026-09-21: it scrolled sideways).
 `lib/powersync/describeSyncError.ts` turns PowerSync's error objects into something a person can
 act on, and `lib/powersync/bootLog.ts` records each boot step with a timestamp so a boot that
 stalls can say where.
