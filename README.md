@@ -116,6 +116,18 @@ debugging on "Add list did nothing".
 round `+` add-item button (an `.icon-btn`), so that button carried the class and got no styling at
 all for a week.
 
+### A different account signing in clears the device first.
+
+PowerSync keeps its on-device database across a sign-out. Before 2026-09-21 nothing cleared it, so
+the next account on a phone was shown the previous one's lists **and private My jobs** until enough
+relaunches let its own sync replace them (Adam: "the old list remains, it takes several force
+closes"). `SyncRoot` now remembers the last account on the device and, when a **different** one
+signs in, calls `disconnectAndClear()` before anything reads the database — the rule
+`shared-finance-ledger` has always had (`lib/accountSwitch.ts`, `scripts/verify-account-switch.ts`).
+The same account signing back in keeps its data, unsent changes included; the Account sheet warns
+before a sign-out would leave changes unsent. **Don't remove it, and don't make sign-out clear the
+device either** — that would lose unsent changes for the common case of signing straight back in.
+
 ### The service worker has no `fetch` handler.
 
 `public/sw.js` exists for push notifications only. A service worker that caches is how a PWA gets

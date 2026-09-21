@@ -593,6 +593,34 @@ panel **share**, so they cannot disagree:
 > app badged "Offline" while the first download was still in flight is misleading. **"Offline"
 > means "working from local data" — and before a first sync there IS no local data.**
 
+### Sync now
+
+`components/SyncNowSection.tsx` + `lib/powersync/syncNow.ts`, in the Account sheet (Adam,
+2026-09-21). It **disconnects and reconnects** — what every launch does, and what the ledger's
+`forceSync` does. Reconnecting makes PowerSync upload everything queued, then fetch a fresh
+checkpoint and download everything since the last one: **both directions, in that order**, and
+the order is the protocol's own — a download is applied only once the server's state includes
+this phone's uploads, so the pull can never overwrite what this phone just sent. The button says
+"Syncing…" until `syncNowFinished()` holds (queue empty **and** a sync completed after the press,
+nothing moving, no error), then says what it sent; or after 30s says why not. Offline, it says so
+at once rather than trying. **It is not a reset**: nothing is cleared or re-downloaded from
+scratch.
+
+### Signing in, signing out, and switching accounts
+
+- **Switching account clears the device** (README → "A different account signing in clears the
+  device first"). `lib/accountSwitch.ts` decides `keep` / `clear` / `adopt`; the one `adopt` case is
+  the first launch after this shipped, with changes still queued, where clearing would lose them.
+- **Signing out disconnects.** Signing out *unmounts* `SyncRoot` (the gate swaps it for the sign-in
+  screen), so its old `!userId` effect never ran and the previous connection stayed open under the
+  next sign-in. The boot effect's cleanup now disconnects, as the ledger's does.
+- **The loading screen is never a dead end.** After 8s "Getting your lists…" names the startup step
+  it is waiting on and offers **Try again** (a reload — what force-closing did, without leaving the
+  app). The stalled attempt's steps are kept for one reload in `sessionStorage` and shown in the Sync
+  check as "The start-up before this one".
+- **The sign-out warning.** If changes are waiting to upload, Sign out first says how many, that they
+  send when this account signs back in, and that a different account signing in here would lose them.
+
 `components/SyncDiagnostics.tsx` is the "why not?" panel behind the dot. **The answer comes first,
 in plain words** — from `syncHealth()`, or from the first failed active check (sign-in, token,
 server reachable, server accepts the sign-in) unless the phone is simply offline. Everything else

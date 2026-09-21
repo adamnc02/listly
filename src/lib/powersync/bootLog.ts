@@ -42,3 +42,34 @@ export function readBootLog(): BootStep[] {
 export function clearBootLog(): void {
   steps.length = 0
 }
+
+/**
+ * The previous start-up's log, when it was abandoned — kept across ONE
+ * reload in sessionStorage, so "Try again" on a stalled loading screen does
+ * not also wipe the only record of where it stalled. A force-close still
+ * loses it (sessionStorage dies with the app); Try again exists so that
+ * nobody has to force-close.
+ */
+const PREVIOUS_KEY = 'listly:boot-previous'
+
+export interface PreviousBoot {
+  why: string
+  steps: BootStep[]
+}
+
+export function keepBootLogForNextStart(why: string): void {
+  try {
+    sessionStorage.setItem(PREVIOUS_KEY, JSON.stringify({ why, steps } satisfies PreviousBoot))
+  } catch {
+    /* storage blocked — nothing to keep it in */
+  }
+}
+
+export function readPreviousBoot(): PreviousBoot | null {
+  try {
+    const raw = sessionStorage.getItem(PREVIOUS_KEY)
+    return raw ? (JSON.parse(raw) as PreviousBoot) : null
+  } catch {
+    return null
+  }
+}

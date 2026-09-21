@@ -120,3 +120,23 @@ export function syncHealth(f: SyncFacts): SyncHealth {
     detail: f.lastSyncedAt ? `Last synced at ${time(f.lastSyncedAt)}.` : 'Up to date.',
   }
 }
+
+/**
+ * "Sync now" is finished when BOTH directions are: everything this phone
+ * had queued has been accepted by the server, AND a download has completed
+ * since the button was pressed — so the latest from the other phone is in.
+ * PowerSync applies a download only once the server's state includes this
+ * phone's own uploads (its write checkpoint), so "queue empty + a fresh sync
+ * completed" means the two ends agree. Nothing still moving, and no error.
+ */
+export function syncNowFinished(f: SyncFacts, startedAt: Date): boolean {
+  return (
+    f.connected &&
+    f.waiting === 0 &&
+    !f.downloading &&
+    !f.uploading &&
+    (f.downloadError === undefined || f.downloadError === null) &&
+    f.lastSyncedAt !== undefined &&
+    f.lastSyncedAt.getTime() >= startedAt.getTime()
+  )
+}

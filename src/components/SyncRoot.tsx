@@ -3,8 +3,9 @@ import { useAuth } from '../context/AuthContext'
 import { powerSyncDb, powerSyncConnector, LISTLY_STREAM, LISTLY_REF_STREAM } from '../lib/powersync/database'
 import { getHouseholdId, refreshHouseholdId } from '../lib/powersync/household'
 import { assertListlySchemaReachable } from '../lib/supabaseClient'
-import { recordBootStep, clearBootLog } from '../lib/powersync/bootLog'
+import { recordBootStep, clearBootLog, readBootLog, keepBootLogForNextStart } from '../lib/powersync/bootLog'
 import { describeSyncError } from '../lib/powersync/describeSyncError'
+import { accountSwitch } from '../lib/accountSwitch'
 
 /**
  * Boots sync, and holds the household guard.
@@ -88,6 +89,50 @@ function hasSyncedBefore(userId: string): boolean {
     // Private mode, or storage blocked. Treat as "never synced": waiting once
     // more is harmless, and rendering an empty app is not.
     return false
+  }
+}
+
+function forgetSynced(userId: string) {
+  try {
+    localStorage.removeItem(firstSyncKey(userId))
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * 🚨 WHO THIS DEVICE'S LOCAL DATABASE BELONGS TO.
+ *
+ * Adam, 2026-09-21: "When switching account, the old list remains, it takes
+ * several force closes to change". Signing out never cleared PowerSync's
+ * on-device database — so the next account to sign in on the phone was shown
+ * the previous one's lists, and its PRIVATE My jobs, until enough relaunches
+ * let the new account's sync overwrite them.
+ *
+ * Ported from shared-finance-ledger's SyncRoot, proven in production on this
+ * same PowerSync instance: remember the last user, and when a DIFFERENT one
+ * signs in, `disconnectAndClear()` before connecting. The same user signing
+ * back in keeps their data — including anything not yet uploaded, which then
+ * sends. The account sheet warns before a sign-out would strand unsent
+ * changes (a different account signing in here would clear them).
+ */
+const LAST_USER_KEY = 'listly:last-user'
+
+function lastUser(): string | null {
+  try {
+    return localStorage.getItem(LAST_USER_KEY)
+  } catch {
+    // Unknown is treated as "someone else": clearing is safe, showing
+    // another person's data is not.
+    return null
+  }
+}
+
+function rememberUser(userId: string) {
+  try {
+    localStorage.setItem(LAST_USER_KEY, userId)
+  } catch {
+    /* ignore — the only cost is clearing again next time */
   }
 }
 
@@ -201,6 +246,27 @@ export function SyncRoot({ children }: { children: ReactNode }) {
           return
         }
         recordBootStep('listly schema reachable', 'ok')
+
+        // 🚨 A different account from the last one on this device: clear the
+        // local database BEFORE anything reads it. See LAST_USER_KEY.
+        const previousUser = lastUser()
+        const waiting = (await powerSyncDb.getUploadQueueStats().catch(() => ({ count: 0 }))).count
+        const action = accountSwitch(previousUser, userId, waiting)
+        if (action === 'adopt') {
+          // The first launch after this check shipped: nobody is recorded
+          // yet. Clearing now would throw away changes still waiting to
+          // upload, so this one time it keeps them and records the user.
+          rememberUser(userId)
+          recordBootStep('first run of the account check', 'note', `${waiting} unsent change(s) kept`)
+        } else if (action === 'clear') {
+          await withTimeout(powerSyncDb.disconnectAndClear(), 20000, 'Clearing the previous account')
+          forgetSynced(userId)
+          rememberUser(userId)
+          recordBootStep('new account on this device', 'ok', 'previous account’s local data cleared')
+        } else {
+          recordBootStep('same account as last time', 'ok', 'keeping local data')
+        }
+        if (cancelled) return
       } catch (e) {
         if (cancelled) return
         const msg = e instanceof Error ? e.message : String(e)
@@ -347,6 +413,11 @@ export function SyncRoot({ children }: { children: ReactNode }) {
       cancelled = true
       unsubscribeWatch?.()
       unsubscribeStreams?.()
+      // 🚨 Signing out UNMOUNTS this component (the gate swaps it for the
+      // sign-in screen), so the `!userId` effect below never ran and the old
+      // connection stayed open under the next sign-in. Disconnect here, the
+      // way the ledger does.
+      void powerSyncDb.disconnect().catch(() => {})
     }
   }, [userId, checkMembership])
 
@@ -369,17 +440,16 @@ export function SyncRoot({ children }: { children: ReactNode }) {
     void powerSyncDb.disconnect().catch(() => {})
   }, [userId])
 
-  if (status.kind === 'starting') {
-    return <Splash>Getting your lists…</Splash>
-  }
-
-  if (status.kind === 'first-sync') {
+  if (status.kind === 'starting' || status.kind === 'first-sync') {
     return (
       <Splash>
         <div>Getting your lists…</div>
-        <div className="help" style={{ marginTop: 10 }}>
-          First time on this device, so everything is downloading. It only happens once.
-        </div>
+        {status.kind === 'first-sync' && (
+          <div className="help" style={{ marginTop: 10 }}>
+            First time on this device, so everything is downloading. It only happens once.
+          </div>
+        )}
+        <StillWaiting />
       </Splash>
     )
   }
@@ -427,6 +497,48 @@ export function SyncRoot({ children }: { children: ReactNode }) {
         </div>
       )}
     </HouseholdContext.Provider>
+  )
+}
+
+/**
+ * 🚨 A loading screen is never a dead end (Adam, 2026-09-21: it "seems to
+ * stall, and only force closing the app actually allows the lists to load").
+ * After 8 seconds it says which startup step it is waiting on — the same boot
+ * log the Sync check shows — and offers Try again, which reloads: exactly what
+ * a force-close did, without leaving the app. The step it stalled on is kept
+ * for the Sync check after the reload (bootLog's `previous` record).
+ */
+function StillWaiting() {
+  const [late, setLate] = useState(false)
+  const [, tick] = useState(0)
+  useEffect(() => {
+    const t = window.setTimeout(() => setLate(true), 8000)
+    const i = window.setInterval(() => tick((n) => n + 1), 1000)
+    return () => {
+      window.clearTimeout(t)
+      window.clearInterval(i)
+    }
+  }, [])
+  if (!late) return null
+  const steps = readBootLog()
+  const last = steps[steps.length - 1]
+  return (
+    <div style={{ marginTop: 18 }}>
+      <div className="help">
+        This is taking longer than it should.
+        {last ? ` Waiting after: ${last.step}.` : ' Startup has not begun.'}
+      </div>
+      <button
+        className="btn brown"
+        style={{ marginTop: 12 }}
+        onClick={() => {
+          keepBootLogForNextStart('stalled on the loading screen')
+          window.location.reload()
+        }}
+      >
+        Try again
+      </button>
+    </div>
   )
 }
 

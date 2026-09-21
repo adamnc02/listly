@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Sheet } from './Sheet'
 import { supabase } from '../lib/supabaseClient'
 import { powerSyncDb, LISTLY_STREAM, LISTLY_REF_STREAM } from '../lib/powersync/database'
-import { readBootLog } from '../lib/powersync/bootLog'
+import { readBootLog, readPreviousBoot } from '../lib/powersync/bootLog'
 import { describeSyncError } from '../lib/powersync/describeSyncError'
 import { useSyncHealth } from '../lib/powersync/useSyncHealth'
 
@@ -194,6 +194,7 @@ export function SyncDiagnostics({ onClose }: { onClose: () => void }) {
 
   const firstFail = checks.find((c) => c.state === 'fail')
   const boot = readBootLog()
+  const previous = readPreviousBoot()
   const { facts, health } = useSyncHealth()
   const err = facts.downloadError ?? facts.uploadError
   // An upload error with nothing waiting is history (lib/syncHealth.ts).
@@ -302,6 +303,22 @@ export function SyncDiagnostics({ onClose }: { onClose: () => void }) {
               </div>
             </div>
           ))}
+          {previous && (
+            <>
+              <div className="lbl">The start-up before this one ({previous.why})</div>
+              {previous.steps.map((b, i) => (
+                <div className="mrow" key={`p${i}`}>
+                  <span className="diag-dot" style={{ background: dot(b.level) }} />
+                  <div className="grow">
+                    <div className="st">
+                      {b.at} · {b.step}
+                    </div>
+                    {b.detail && <div className="st">{b.detail}</div>}
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
         </details>
 
         <div className="actions">
