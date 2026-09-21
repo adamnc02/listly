@@ -853,3 +853,26 @@ nav button[aria-current=page] { background: var(--brown); color: #fff; }
   .confirm-card, .confirm-result, .confirm-root.leaving .confirm-card { animation-name: confirm-fade; }
   .confirm-mark .ring, .confirm-mark .stroke { stroke-dashoffset: 0; animation: none; }
 }
+
+/* ---------- reminders (RemindersSection.tsx) ---------- */
+/* 🚨 No email fallback: a device that cannot be reminded must LOOK like it.
+   `warn` is every state in which this device will not get a reminder. */
+.reminders { display: flex; flex-direction: column; gap: 10px; }
+.reminders > .help, .reminders > .lbl { margin: 0; }
+.reminder-state { padding: 12px 14px; font-size: 19px; line-height: 1.35; }
+.reminder-state.warn { border-color: var(--brown-2); background: var(--chip-bg); }
+.reminder-state.ok { border-color: var(--sage); background: var(--sage-wash); color: var(--ink); }
+.reminder-state .actions { margin-top: 10px; flex-wrap: wrap; row-gap: 8px; }
+/* Two buttons do not fit side by side in a phone-width card; the primary one
+   takes the full width and the other sits under it. */
+.reminder-state .actions .btn.sage { flex: 1 1 100%; }
+.device-list { list-style: none; margin: 4px 0 0; padding: 0; }
+.device-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 19px;
+}
+.device-list .sub { font-size: 16px; color: var(--muted); }

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Sheet } from './Sheet'
+import { RemindersSection } from './RemindersSection'
 import { useAuth } from '../context/AuthContext'
 import { getLinkCode, regenerateLinkCode, redeemLinkCode, eraseMyData } from '../lib/powersync/linking'
 
@@ -153,6 +154,10 @@ export function AccountModal({ onClose }: { onClose: () => void }) {
 
       {note && <p className="help" style={{ color: 'var(--sage)' }}>{note}</p>}
       {error && <p className="help" style={{ color: 'var(--red)' }} role="alert">{error}</p>}
+
+      {/* Phase 5. Its own component: it has its own states, its own errors,
+          and nothing to do with the household above. */}
+      <RemindersSection />
 
       <div className="actions">
         <button className="btn ghost" onClick={() => void signOut()}>Sign out</button>

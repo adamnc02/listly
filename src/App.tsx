@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { AuthGate } from './components/AuthGate'
 import { SyncRoot } from './components/SyncRoot'
@@ -26,8 +26,27 @@ export type Tab = 'shopping' | 'house' | 'mine'
  * prototype's bulk and it would be carried into every build for no reason
  * (PROMPT-01 §11).
  */
+/** A reminder's notification opens Listly on that job's tab: `?tab=house`. */
+function tabFrom(url: string): Tab | null {
+  const t = new URL(url, window.location.href).searchParams.get('tab')
+  return t === 'house' || t === 'mine' || t === 'shopping' ? t : null
+}
+
 function Shell() {
-  const [tab, setTab] = useState<Tab>('shopping')
+  const [tab, setTab] = useState<Tab>(() => tabFrom(window.location.href) ?? 'shopping')
+
+  // Tapping a notification while Listly is already open reuses that window
+  // (public/sw.js), and says which tab to show.
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return
+    const onMessage = (e: MessageEvent) => {
+      if (e.data?.type !== 'listly:open' || typeof e.data.url !== 'string') return
+      const t = tabFrom(e.data.url)
+      if (t) setTab(t)
+    }
+    navigator.serviceWorker.addEventListener('message', onMessage)
+    return () => navigator.serviceWorker.removeEventListener('message', onMessage)
+  }, [])
   const [accountOpen, setAccountOpen] = useState(false)
 
   return (
