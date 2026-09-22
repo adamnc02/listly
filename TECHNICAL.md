@@ -440,19 +440,32 @@ default, which is why nobody noticed.
 |---|---|
 | `location === 'personal'` | A joint or pot shop never rounds. `type: expense` and `payment_method: card` are hard-coded in this app, so two of the ledger's five predicate clauses are satisfied by construction |
 | the uplift is > 0 | An **exact pound** does not round — `Math.ceil` returns the same pound. The `round2` first is load-bearing: a `7.500000000000001` must not round to £9 |
-| `spendDate === today` | 🚨 A **backdated** shop does not round, deliberately — see below |
+| `spendDate <= today` | 🚨 **Never a future date** — a forward-dated shop books as `pending` and the switch may change before it happens. Backdated shops DO round, resolved against the rule that governed their own date |
 | rounding is on for the **owner** of the picked location, and they have a Coin Jar | 🚨 The owner, **never the signed-in user**: Ella's Current Account shop rounds into **Ella's** jar, gated on **her** switch |
 
 > 🚨 **An always-present step that sometimes says "not rounding" would be worse than no step.** The
 > step appearing and disappearing as the location or date changes *is* the feature telling the
 > truth.
 
-**The backdating limitation is deliberate.** Answering "was rounding on *then*" needs the ledger's
-dated on/off history walked (`roundUpEnabledOn`, and `APP-KNOWLEDGE.md §1.19f` for why its start
-date is load-bearing). Re-implementing that walk in SQL would be a second copy of a subtle rule,
-free to drift silently. Adam, 2026-09-21: a backdated Listly shop simply does not round. Change the
-date away from today and the step disappears — visibly, not silently. A backdated expense entered
-**in the ledger app** still rounds on its own date, as it always has.
+**The dated rules are resolved properly, and that was a correction.** The first build asked only
+"is rounding on *now*", to avoid a second copy of the ledger's `roundUpEnabledOn` walk drifting from
+it. 🚨 **UAT on 2026-09-22 showed that was not a limitation at the edges but a wrong answer in the
+middle:** Adam switched round-ups **off effective from the 24th**, and Listly stopped rounding
+immediately — the 22nd and 23rd read as not-enabled — while the ledger correctly kept rounding until
+the 24th. `round_up_enabled` and `round_up_effective_from` describe only the **current** rule; the
+rule that governs an earlier date lives in `round_up_history`, and a dated switch cannot be resolved
+without it.
+
+`round_up_state_for` now walks the rules exactly as `roundUpEnabledOn` does — history entries in
+order, each from its own `from` (falling back to the previous entry's `nextRuleFrom`) up to its own
+`until`, then the current rule, first match wins, and an earliest rule with no start governs nothing
+(§1.19f). **That is a second implementation, so the parity test is no longer optional:**
+`behaviour-listly-round-ups.mjs` runs the SQL and a verbatim port of the app's algorithm over the
+same cases and fails on any disagreement. It found one immediately — see the app knowledge file.
+
+🚨 **A future date is still never rounded**, and that guard lives in the RPC as well as the app, so
+a later caller cannot lose it. Adam, 2026-09-22: *"it needs to resolve, but for today or before
+only, never in the future."*
 
 **Where the answer comes from.** The switch lives in `shared_finance_ledger.pay_cycles`, which
 Listly does not sync — replicating a household's whole financial configuration into a shopping app
@@ -460,9 +473,16 @@ to answer one yes/no question is the wrong trade. One read-only RPC,
 `round_up_state_for(person, date)`, answers it; it is household-scoped server-side and returns
 `enabled = false` rather than a jarless "on".
 
-> 🚨 **And it is CACHED per person on the phone**, because Finish shop has to work standing in a
-> shop with no signal — the reason every other picker reads a `lst_ref_` mirror. Offline, the step
-> still appears and the shop still rounds, from the last known answer (Adam, 2026-09-21).
+> 🚨 **And it is CACHED per person AND DATE on the phone**, because Finish shop has to work standing
+> in a shop with no signal — the reason every other picker reads a `lst_ref_` mirror. Offline, the
+> step still appears and the shop still rounds, from the last known answer (Adam, 2026-09-21).
+>
+> The date is half the key, since 2026-09-22: the answer is a property of a person **on a date**,
+> not of a person. There is deliberately **no "nearest earlier date" fallback** — that is exactly how
+> a switch dated the 24th would round a shop on the 24th using an answer fetched on the 22nd. To
+> keep the offline case working anyway, today's answer is **prefetched** for every person whenever
+> the app has signal, so the first shop of the day does not meet an empty cache. Entries older than
+> a month are pruned.
 > **An empty, stale, corrupt or unwritable cache always reads as "off"**: a shop that does not round
 > is visible and fixable, while a shop that rounds into a jar that is not there is a 23514 the
 > connector discards silently and the shop is gone (§27). The cache is cleared when a different

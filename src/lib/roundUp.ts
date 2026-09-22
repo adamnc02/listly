@@ -65,12 +65,22 @@ export function roundUpUplift(amount: number): number {
  * five predicate clauses are satisfied by construction and are not re-tested
  * here.
  *
- * 🚨 ONLY A SHOP DATED TODAY (Adam, 2026-09-21). A backdated shop would need
- * the ledger's `roundUpHistory` walk re-implemented in SQL to answer "was
- * rounding on THEN", and a second implementation of that walk is precisely
- * the thing that drifts (§1.19f). A future-dated shop books as `pending` and
- * does not round either. The limitation is deliberate and must stay VISIBLE:
- * change the date away from today and the step disappears.
+ * 🚨 TODAY OR EARLIER — NEVER THE FUTURE (Adam, 2026-09-22: "it needs to
+ * resolve, but for today or before only, never in the future").
+ *
+ * The original rule was today-only, because answering "was rounding on THEN"
+ * needed the ledger's dated history walked and PROMPT-05 §0.2 avoided writing
+ * a second copy of it. That turned out to be the wrong trade: UAT found the
+ * simplification was not a limitation at the edges but an INCORRECT ANSWER in
+ * the middle — with "off from the 24th" as the current rule, the RPC reported
+ * not-enabled for the 22nd and 23rd while the ledger rounded them. Resolving
+ * the rules properly was the only fix, so `round_up_state_for` now walks them
+ * (20260922060000) and a backdated shop resolves against the rule that
+ * governed it.
+ *
+ * A FUTURE date is still never rounded, and that guard is duplicated in the
+ * RPC so it cannot be lost: a forward-dated shop books as `pending`, and the
+ * switch may change before it happens.
  */
 export function roundUpApplies(
   args: { amount: number; location: LocationOption | null; spendDate: string; today: string },
@@ -81,7 +91,7 @@ export function roundUpApplies(
   // A personal shop always has an owner: the picker builds one entry per
   // `people` row and sets ownerId from it.
   if (!args.location.ownerId) return false
-  if (args.spendDate !== args.today) return false
+  if (args.spendDate > args.today) return false
   return roundUpUplift(args.amount) > 0
 }
 

@@ -56,46 +56,67 @@ const check = (name: string, ok: boolean, detail = '') => {
 const KEY = 'listly:round-up-state:v1'
 
 // ── nothing known ─────────────────────────────────────────────────────────
-check('🚨 an empty cache reads as OFF', !cachedRoundUpFor({}, 'adam').enabled)
-check('a person never seen reads as OFF', !cachedRoundUpFor(loadRoundUpCache(), 'nobody').enabled)
+const TODAY = '2026-09-22'
+const YESTERDAY = '2026-09-21'
+check('🚨 an empty cache reads as OFF', !cachedRoundUpFor({}, 'adam', TODAY).enabled)
+check('a person never seen reads as OFF', !cachedRoundUpFor(loadRoundUpCache(), 'nobody', TODAY).enabled)
 
 // ── a real answer ─────────────────────────────────────────────────────────
-let cache = withRoundUpAnswer({}, 'adam', { enabled: true, jarPotId: 'jar-adam' }, '2026-09-21T10:00:00.000Z')
-check('an answer is remembered', cachedRoundUpFor(cache, 'adam').jarPotId === 'jar-adam')
+let cache = withRoundUpAnswer({}, 'adam', TODAY, { enabled: true, jarPotId: 'jar-adam' }, '2026-09-22T10:00:00.000Z')
+check('an answer is remembered', cachedRoundUpFor(cache, 'adam', TODAY).jarPotId === 'jar-adam')
 check('it survives a save/load round trip', (() => {
   saveRoundUpCache(cache)
-  return cachedRoundUpFor(loadRoundUpCache(), 'adam').jarPotId === 'jar-adam'
+  return cachedRoundUpFor(loadRoundUpCache(), 'adam', TODAY).jarPotId === 'jar-adam'
+})())
+
+// 🚨 THE DATE IS PART OF THE KEY (2026-09-22). The switch is dated and can be
+// changed with a future effective-from, so an answer for one day says nothing
+// about another — and a "nearest earlier date" fallback would round a shop on
+// the 24th using the answer fetched on the 22nd, which is the very bug that
+// forced this rewrite.
+check('🚨 today’s answer does NOT answer for yesterday', !cachedRoundUpFor(cache, 'adam', YESTERDAY).enabled)
+check('  and each date is remembered separately', (() => {
+  const two = withRoundUpAnswer(cache, 'adam', YESTERDAY, { enabled: false, jarPotId: '' })
+  return cachedRoundUpFor(two, 'adam', TODAY).enabled && !cachedRoundUpFor(two, 'adam', YESTERDAY).enabled
 })())
 
 // ── whose answer ──────────────────────────────────────────────────────────
-cache = withRoundUpAnswer(cache, 'ella', { enabled: true, jarPotId: 'jar-ella' })
-check('🚨 Ella’s answer is Ella’s, and Adam’s is Adam’s', 
-  cachedRoundUpFor(cache, 'ella').jarPotId === 'jar-ella' &&
-  cachedRoundUpFor(cache, 'adam').jarPotId === 'jar-adam')
+cache = withRoundUpAnswer(cache, 'ella', TODAY, { enabled: true, jarPotId: 'jar-ella' })
+check('🚨 Ella’s answer is Ella’s, and Adam’s is Adam’s',
+  cachedRoundUpFor(cache, 'ella', TODAY).jarPotId === 'jar-ella' &&
+  cachedRoundUpFor(cache, 'adam', TODAY).jarPotId === 'jar-adam')
 check('one person switching off leaves the other alone', (() => {
-  const next = withRoundUpAnswer(cache, 'adam', { enabled: false, jarPotId: '' })
-  return !cachedRoundUpFor(next, 'adam').enabled && cachedRoundUpFor(next, 'ella').enabled
+  const next = withRoundUpAnswer(cache, 'adam', TODAY, { enabled: false, jarPotId: '' })
+  return !cachedRoundUpFor(next, 'adam', TODAY).enabled && cachedRoundUpFor(next, 'ella', TODAY).enabled
 })())
 
 // ── malformed answers all land on OFF ─────────────────────────────────────
-check('🚨 “on” with no jar is read as OFF', !cachedRoundUpFor(withRoundUpAnswer({}, 'adam', { enabled: true, jarPotId: '' }), 'adam').enabled)
-check('  and is not even stored as on', withRoundUpAnswer({}, 'adam', { enabled: true, jarPotId: '' }).adam.enabled === false)
+check('🚨 “on” with no jar is read as OFF',
+  !cachedRoundUpFor(withRoundUpAnswer({}, 'adam', TODAY, { enabled: true, jarPotId: '' }), 'adam', TODAY).enabled)
+check('  and is not even stored as on',
+  withRoundUpAnswer({}, 'adam', TODAY, { enabled: true, jarPotId: '' })[`adam|${TODAY}`].enabled === false)
 store.put(KEY, '{not json')
 check('🚨 unparseable storage reads as an empty cache', Object.keys(loadRoundUpCache()).length === 0)
 store.put(KEY, '"a string"')
 check('a JSON string, not an object, reads as empty', Object.keys(loadRoundUpCache()).length === 0)
 store.put(KEY, '[1,2,3]')
 check('an array reads as empty', Object.keys(loadRoundUpCache()).length === 0)
-store.put(KEY, JSON.stringify({ adam: { enabled: true } }))
-check('🚨 a stored entry missing its jar id reads as OFF', !cachedRoundUpFor(loadRoundUpCache(), 'adam').enabled)
-store.put(KEY, JSON.stringify({ adam: { enabled: 'yes', jarPotId: 'jar-adam' } }))
-check('a non-boolean “enabled” is not truthy-coerced to on', !cachedRoundUpFor(loadRoundUpCache(), 'adam').enabled)
+store.put(KEY, JSON.stringify({ [`adam|${TODAY}`]: { enabled: true } }))
+check('🚨 a stored entry missing its jar id reads as OFF', !cachedRoundUpFor(loadRoundUpCache(), 'adam', TODAY).enabled)
+store.put(KEY, JSON.stringify({ [`adam|${TODAY}`]: { enabled: 'yes', jarPotId: 'jar-adam' } }))
+check('a non-boolean “enabled” is not truthy-coerced to on', !cachedRoundUpFor(loadRoundUpCache(), 'adam', TODAY).enabled)
 
 // ── tidying up ────────────────────────────────────────────────────────────
-const two = withRoundUpAnswer(withRoundUpAnswer({}, 'adam', { enabled: true, jarPotId: 'jar-adam' }), 'ella', { enabled: true, jarPotId: 'jar-ella' })
+const two = withRoundUpAnswer(withRoundUpAnswer({}, 'adam', TODAY, { enabled: true, jarPotId: 'jar-adam' }), 'ella', TODAY, { enabled: true, jarPotId: 'jar-ella' })
 check('a person who has left the household is pruned', (() => {
   const pruned = pruneRoundUpCache(two, ['adam'])
-  return 'adam' in pruned && !('ella' in pruned)
+  return `adam|${TODAY}` in pruned && !(`ella|${TODAY}` in pruned)
+})())
+// One entry per person PER DATE would otherwise grow forever.
+check('🚨 entries older than the cut-off are dropped', (() => {
+  const old = withRoundUpAnswer(two, 'adam', '2026-01-01', { enabled: true, jarPotId: 'jar-adam' })
+  const pruned = pruneRoundUpCache(old, ['adam', 'ella'], '2026-09-01')
+  return !('adam|2026-01-01' in pruned) && `adam|${TODAY}` in pruned
 })())
 check('🚨 a new account on this phone inherits nothing', (() => {
   saveRoundUpCache(two)

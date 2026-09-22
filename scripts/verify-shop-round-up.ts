@@ -61,8 +61,19 @@ check('🚨 a POT shop does not round', !applies(7.5, pot, adamOn))
 check('no location picked yet → does not round', !applies(7.5, null, adamOn))
 check('rounding switched off → does not round', !applies(7.5, personal('adam'), ROUND_UP_OFF))
 check('🚨 switch on but NO COIN JAR → does not round', !applies(7.5, personal('adam'), noJar))
-check('🚨 a BACKDATED shop does not round', !applies(7.5, personal('adam'), adamOn, YESTERDAY))
-check('a future-dated shop does not round either (it books as pending)', !applies(7.5, personal('adam'), adamOn, TOMORROW))
+// 🚨 CHANGED 2026-09-22, after UAT. A backdated shop now DOES round, resolved
+// against the rule that governed its own date — the RPC walks the dated rules
+// the way the ledger does. The old today-only rule was not a limitation at the
+// edges, it was an incorrect answer in the middle: with "off from the 24th" as
+// the current rule, the 22nd and 23rd read as not-enabled while the ledger
+// rounded them. Adam, 2026-09-22: "it needs to resolve, but for today or
+// before only, never in the future."
+check('a BACKDATED shop rounds, if rounding was on for THAT date', applies(7.5, personal('adam'), adamOn, YESTERDAY))
+check('🚨 a FUTURE-dated shop never rounds — it books as pending and the switch may change',
+  !applies(7.5, personal('adam'), adamOn, TOMORROW))
+// The server says the same thing independently: round_up_state_for returns
+// false for any date after London today, whatever the rules say. Two guards,
+// because the app's can be forgotten by a future caller and the RPC's cannot.
 
 // 🚨 THE CONTROL. Dropping the `location === 'personal'` clause must make
 // the joint case round — otherwise the clause above is not doing any work
@@ -77,8 +88,8 @@ check(
 const withoutDateClause = (amount: number, location: LocationOption | null, state: RoundUpState) =>
   state.enabled && state.jarPotId !== '' && location?.location === 'personal' && roundUpUplift(amount) > 0
 check(
-  'CONTROL: without the today-only clause, a backdated shop WOULD round',
-  withoutDateClause(7.5, personal('adam'), adamOn) && !applies(7.5, personal('adam'), adamOn, YESTERDAY),
+  'CONTROL: without the future clause, a tomorrow-dated shop WOULD round',
+  withoutDateClause(7.5, personal('adam'), adamOn) && !applies(7.5, personal('adam'), adamOn, TOMORROW),
 )
 
 // ── whose jar ─────────────────────────────────────────────────────────────
@@ -134,7 +145,7 @@ const neverOffered: [string, ReturnType<typeof shopRoundUpFields>][] = [
   ['a joint shop', shopRoundUpFields({ amount: 7.5, location: joint, spendDate: TODAY, today: TODAY, skipped: true }, adamOn)],
   ['a pot shop', shopRoundUpFields({ amount: 7.5, location: pot, spendDate: TODAY, today: TODAY, skipped: true }, adamOn)],
   ['an exact pound', shopRoundUpFields({ amount: 8, location: personal('adam'), spendDate: TODAY, today: TODAY, skipped: true }, adamOn)],
-  ['a BACKDATED shop', shopRoundUpFields({ amount: 7.5, location: personal('adam'), spendDate: YESTERDAY, today: TODAY, skipped: true }, adamOn)],
+  ['a FUTURE-dated shop', shopRoundUpFields({ amount: 7.5, location: personal('adam'), spendDate: TOMORROW, today: TODAY, skipped: true }, adamOn)],
   ['rounding switched off', shopRoundUpFields({ amount: 7.5, location: personal('adam'), spendDate: TODAY, today: TODAY, skipped: true }, ROUND_UP_OFF)],
   ['no Coin Jar', shopRoundUpFields({ amount: 7.5, location: personal('adam'), spendDate: TODAY, today: TODAY, skipped: true }, noJar)],
 ]

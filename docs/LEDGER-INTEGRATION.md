@@ -180,11 +180,19 @@ computes nothing.** Two consequences a later session must not reverse:
 already folds the uplift into the jar, so **no ledger app code change was needed, and none was
 made.**
 
-🚨 **A BACKDATED Listly shop does not round** (Adam, 2026-09-21). `round_up_state_for` answers for
-one date against the *current* rule and deliberately does not walk `round_up_history` — a second
-implementation of `roundUpEnabledOn` in SQL is exactly the thing that drifts silently. This is a
-deliberate limitation, visible in the flow (change the date and the step disappears), not a bug. A
-backdated expense entered **in the ledger app** still rounds on its own date.
+🚨 **`round_up_state_for` RESOLVES THE DATED RULES, and it must keep doing so** (fixed
+`20260922060000`). It first did not — it read `round_up_enabled` and `round_up_effective_from`
+alone — and that is wrong the moment a change is dated in the FUTURE: with "off from the 24th" as
+the current rule, every earlier date reports not-enabled, while the ledger correctly rounds up to
+the 24th. Found by Adam in UAT, 2026-09-22. The pair describes the current rule only; the rule
+governing an earlier date is in `round_up_history`.
+
+**This makes it a second implementation of `roundUpEnabledOn`, so if you change that function you
+must change this one.** `tools/schema-test/behaviour-listly-round-ups.mjs` runs both over the same
+cases and fails on disagreement, with the app's algorithm ported verbatim.
+
+🚨 **A FUTURE-dated shop is never rounded**, whatever the rules say — it books as `pending` and the
+switch may change before it happens (Adam, 2026-09-22). The guard is in the RPC as well as the app.
 
 🚨 **A DECLINE IS CARRIED TOO** (`20260922030000`, from UAT on 2026-09-22). Listly's round-up step
 offers "Leave it at £4.25", and that answer is stored on `shop_completions.round_up_skipped` and

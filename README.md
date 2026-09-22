@@ -77,10 +77,11 @@ that person's Coin Jar in the ledger — the same thing the ledger's own entry d
   whole pound, for a person whose round-ups are on and who has a Coin Jar. Otherwise it shows
   nothing at all. 🚨 It is the **owner of the picked account's** switch and jar, never the
   signed-in user's.
-- 🚨 **A backdated shop does not round, deliberately.** Answering "was rounding on *then*" would
-  mean a second copy of the ledger's dated on/off walk living in SQL, free to drift. Change the date
-  away from today and the step disappears — visibly. A backdated expense entered *in the ledger app*
-  still rounds on its own date.
+- 🚨 **A future-dated shop never rounds**, because it books as pending and the switch may change
+  before it happens. A **backdated** one does round, judged against the rule that was in force on
+  its own date — Listly resolves the ledger's dated on/off history the same way the ledger does.
+  It did not at first, and switching round-ups off "from the 24th" made Listly stop rounding
+  immediately while the ledger kept going until the 24th. Found in UAT, 2026-09-22.
 
 The switch itself is not synced to Listly; one read-only RPC answers it, and the answer is
 remembered per person so Finish shop still works with no signal. Anything unknown reads as "off".

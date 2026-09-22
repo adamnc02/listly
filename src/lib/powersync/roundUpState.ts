@@ -54,6 +54,11 @@ export async function fetchRoundUpState(personId: string, dateIso: string): Prom
  * (§1.19d, trap 3). Pass '' when nothing personal is picked and no call is
  * made at all.
  *
+ * 🚨 The DATE is half the question, not a detail. The switch is dated, and it
+ * can be changed with a future effective-from, so "is rounding on for Adam?"
+ * has no answer without one — which is exactly the bug found on 2026-09-22.
+ * Both the cache key and the RPC call carry it.
+ *
  * Refreshing on every change of person or date is deliberate: it is one tiny
  * call, made while somebody is reading a sheet, and it means the common case
  * (signal in the shop) is never stale. With no signal the call fails, the
@@ -61,7 +66,7 @@ export async function fetchRoundUpState(personId: string, dateIso: string): Prom
  */
 export function useRoundUpState(personId: string, dateIso: string): RoundUpState {
   const [state, setState] = useState<RoundUpState>(() =>
-    personId ? cachedRoundUpFor(loadRoundUpCache(), personId) : ROUND_UP_OFF,
+    personId ? cachedRoundUpFor(loadRoundUpCache(), personId, dateIso) : ROUND_UP_OFF,
   )
   // Survives a re-render without re-reading localStorage, and keeps the
   // "which request am I still interested in" check honest across awaits.
@@ -71,7 +76,7 @@ export function useRoundUpState(personId: string, dateIso: string): RoundUpState
     try {
       const answer = await fetchRoundUpState(person, date)
       if (latest.current !== token) return
-      saveRoundUpCache(withRoundUpAnswer(loadRoundUpCache(), person, answer))
+      saveRoundUpCache(withRoundUpAnswer(loadRoundUpCache(), person, date, answer))
       setState(answer)
     } catch {
       // No signal, or the RPC is not deployed yet. The cached answer stands;
@@ -85,9 +90,31 @@ export function useRoundUpState(personId: string, dateIso: string): RoundUpState
       return
     }
     const token = ++latest.current
-    setState(cachedRoundUpFor(loadRoundUpCache(), personId))
+    setState(cachedRoundUpFor(loadRoundUpCache(), personId, dateIso))
     void refresh(personId, dateIso, token)
   }, [personId, dateIso, refresh])
 
   return state
+}
+
+/**
+ * Warms the cache with TODAY's answer for each person, while there is signal.
+ *
+ * 🚨 This is what keeps Finish shop working in a shop with no signal, now that
+ * the cache is keyed by date as well as person. Before, any answer for a
+ * person would do; now an answer for the 21st says nothing about the 22nd, so
+ * without a warm-up the first shop of the day would find an empty cache and
+ * not round. Called when the ledger's people are known and on every sync
+ * delivery, which is cheap: one tiny RPC per person, and none at all offline.
+ */
+export async function prefetchRoundUpStates(personIds: string[], dateIso: string): Promise<void> {
+  for (const personId of personIds) {
+    try {
+      const answer = await fetchRoundUpState(personId, dateIso)
+      saveRoundUpCache(withRoundUpAnswer(loadRoundUpCache(), personId, dateIso, answer))
+    } catch {
+      // Offline, or the RPC is not deployed yet. Whatever is already cached
+      // stands, and an empty cache means no rounding — the safe direction.
+    }
+  }
 }

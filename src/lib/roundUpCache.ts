@@ -13,6 +13,15 @@
  * for does not round. Every read falls back to "off", and a parse failure,
  * a private window or full storage all land in the same safe place.
  *
+ * 🚨 KEYED ON THE PERSON *AND THE DATE*, since 2026-09-22. The answer is not
+ * a property of a person — it is a property of a person on a date, because
+ * the switch is dated and can be changed with a future effective-from. A
+ * per-person cache would answer a backdated shop with today's answer, which
+ * is the same class of bug as the one that made this fix necessary. An exact
+ * key match or nothing: there is deliberately no "nearest earlier date"
+ * fallback, because that is how a switch dated the 24th would round a shop on
+ * the 24th from an answer fetched on the 22nd.
+ *
  * 🚨 KEYED ON THE PERSON, not the signed-in user. Ella's Current Account
  * uses Ella's answer and Ella's jar (§1.19d — her switch, her jar). Keying on
  * the login would round Ella's shop into Adam's jar on Adam's phone, which is
@@ -34,6 +43,12 @@ export interface CachedRoundUp extends RoundUpState {
 }
 
 export type RoundUpCache = Record<string, CachedRoundUp>
+
+/** `<personId>|<yyyy-mm-dd>`. Both halves matter — see the header. */
+export const roundUpKey = (personId: string, dateIso: string): string => `${personId}|${dateIso}`
+
+/** The person half of a key, for pruning. */
+const personOf = (key: string): string => key.split('|')[0]
 
 export function loadRoundUpCache(): RoundUpCache {
   try {
@@ -73,8 +88,8 @@ export function saveRoundUpCache(cache: RoundUpCache): void {
 }
 
 /** The answer for one person, or "off" when this phone has never had one. */
-export function cachedRoundUpFor(cache: RoundUpCache, personId: string): RoundUpState {
-  const hit = cache[personId]
+export function cachedRoundUpFor(cache: RoundUpCache, personId: string, dateIso: string): RoundUpState {
+  const hit = cache[roundUpKey(personId, dateIso)]
   if (!hit || !hit.enabled || !hit.jarPotId) return ROUND_UP_OFF
   return { enabled: true, jarPotId: hit.jarPotId }
 }
@@ -82,13 +97,14 @@ export function cachedRoundUpFor(cache: RoundUpCache, personId: string): RoundUp
 export function withRoundUpAnswer(
   cache: RoundUpCache,
   personId: string,
+  dateIso: string,
   state: RoundUpState,
   at: string = new Date().toISOString(),
 ): RoundUpCache {
   const enabled = state.enabled && state.jarPotId !== ''
   return {
     ...cache,
-    [personId]: { enabled, jarPotId: enabled ? state.jarPotId : '', fetchedAt: at },
+    [roundUpKey(personId, dateIso)]: { enabled, jarPotId: enabled ? state.jarPotId : '', fetchedAt: at },
   }
 }
 
@@ -97,11 +113,17 @@ export function withRoundUpAnswer(
  * cannot grow without bound — and so a person removed from the ledger stops
  * carrying a remembered "on" around. Same shape as pruneDeviceState.
  */
-export function pruneRoundUpCache(cache: RoundUpCache, personIds: string[]): RoundUpCache {
+export function pruneRoundUpCache(cache: RoundUpCache, personIds: string[], keepFrom?: string): RoundUpCache {
   const live = new Set(personIds)
   const out: RoundUpCache = {}
-  for (const [personId, entry] of Object.entries(cache)) {
-    if (live.has(personId)) out[personId] = entry
+  for (const [key, entry] of Object.entries(cache)) {
+    if (!live.has(personOf(key))) continue
+    // Now that there is one entry per DATE, they would otherwise accumulate
+    // forever. Anything older than the cut-off goes; a shop is never
+    // backdated that far, and the answer is refetched whenever there is
+    // signal anyway.
+    if (keepFrom && key.split('|')[1] < keepFrom) continue
+    out[key] = entry
   }
   return out
 }
