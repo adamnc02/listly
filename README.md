@@ -86,6 +86,12 @@ The switch itself is not synced to Listly; one read-only RPC answers it, and the
 remembered per person so Finish shop still works with no signal. Anything unknown reads as "off".
 `TECHNICAL.md` §9a.
 
+> 🐞 **Known, and not Listly's bug** (found in UAT, 2026-09-22): a shop where you chose "leave it"
+> reaches the ledger correctly, but the **ledger's** own edit form shows its round-up checkbox
+> ticked, and re-saving that row there would round it. Tracked in
+> `shared-finance-ledger/PROMPT-13a-round-up-ui-fixes.md` — the fix may or may not land on this
+> side, so don't change anything here until §0.2 is answered.
+
 ### Cancelling Finish shop changes nothing, and that is load-bearing.
 
 Nothing is deleted until the outcome is known — Save and "Don't price it" clear the ticked items,

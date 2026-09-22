@@ -184,6 +184,14 @@ implementation of `roundUpEnabledOn` in SQL is exactly the thing that drifts sil
 deliberate limitation, visible in the flow (change the date and the step disappears), not a bug. A
 backdated expense entered **in the ledger app** still rounds on its own date.
 
+🐞 **Open, found in UAT 2026-09-22 — for a LEDGER developer, not a Listly one.** A Listly shop that
+declined rounding carries `rounded_from = null` and **no** `round_up_skipped`, because Listly does
+not store the decline. The ledger's transaction form seeds its checkbox from that flag, so the row
+shows as *"will round"* and an unrelated edit re-saves it **rounded** — a declined £4.25 becomes
+£5.00. This is the one place the two apps' models genuinely disagree, and it is tracked in
+`shared-finance-ledger/PROMPT-13a-round-up-ui-fixes.md` §0.2, where one of the two candidate fixes
+is for Listly to store the decline after all.
+
 **Whose jar:** the `owner_id` of the **picked location**, never the signed-in user. In a two-person
 household Ella's Current Account shop rounds into **Ella's** jar, gated on **her** switch. Joint and
 pot shops never round, and the trigger drops a pair that somehow arrives on one.

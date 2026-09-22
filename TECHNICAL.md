@@ -472,10 +472,18 @@ to answer one yes/no question is the wrong trade. One read-only RPC,
 **together**, so no caller can write half a pair — both tables carry a both-or-neither CHECK, and a
 violated CHECK under PowerSync is a write discarded with no error.
 
-**"Leave it at £7.50" needs no stored flag**, unlike the ledger's `round_up_skipped`. The ledger
-recomputes rounding every time a row is saved, so an opt-out there has to survive an edit
-(`APP-KNOWLEDGE.md §1.19d-2`); a Listly completion is written once and never recomputed. Nothing to
-reconstruct, so nothing to store.
+**"Leave it at £7.50" stores no flag today** — and 🐞 **UAT on 2026-09-22 showed that reasoning was
+incomplete.** The argument was: the ledger recomputes rounding every time a row is saved, so an
+opt-out *there* has to survive an edit (`APP-KNOWLEDGE.md §1.19d-2`), whereas a Listly completion is
+written once and never recomputed.
+
+True of the completion — **but not of the transaction it becomes.** The row is shared, and the
+ledger recomputes it on every save. So a declined Listly shop arrives correctly at £4.25, and then
+the **ledger's** edit form shows its round-up checkbox **ticked**; edit anything else on that row
+and saving rounds it to £5.00. Nothing in Listly is wrong and nothing here needs changing yet —
+**the fix is being decided in `shared-finance-ledger/PROMPT-13a-round-up-ui-fixes.md` §0.2**, and
+one of the two options is for Listly to store the decline after all. Do not "fix" this side
+pre-emptively.
 
 `scripts/verify-shop-round-up.ts`, `verify-shop-completion-mapping.ts` and
 `verify-round-up-cache.ts` cover the rules, the journey into the ledger row, and every way the cache
