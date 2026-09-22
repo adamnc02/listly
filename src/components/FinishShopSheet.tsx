@@ -90,10 +90,14 @@ export function FinishShopSheet({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // The person's answer on the round-up step. Pre-picked to round, the way
-  // the ledger's own wizard pre-picks it. 🚨 Unlike the ledger this needs no
-  // stored flag: a completion is written once and never recomputed from the
-  // rules, so there is nothing for a later save to silently undo
-  // (APP-KNOWLEDGE §1.19d-2 explains why the ledger's case is different).
+  // the ledger's own wizard pre-picks it.
+  //
+  // 🚨 IT IS STORED, on `shop_completions.round_up_skipped`, and carried into
+  // the ledger row. The first build did not store it, reasoning that a
+  // completion is never recomputed — true, but the TRANSACTION it becomes is
+  // recomputed in the ledger on every save (APP-KNOWLEDGE §1.19d-2). UAT on
+  // 2026-09-22 found a declined £4.25 showing as "will round" there, one
+  // unrelated edit away from being booked at £5.00.
   const [skipRounding, setSkipRounding] = useState(false)
 
   // Two decimals, and nothing a person could not have meant. A blank or
@@ -174,6 +178,7 @@ export function FinishShopSheet({
       location,
       roundedFrom: fields.roundedFrom,
       roundingPotId: fields.roundingPotId,
+      roundUpSkipped: fields.roundUpSkipped,
     })
       .then((id) => onComplete(id))
       .catch((e: unknown) => {

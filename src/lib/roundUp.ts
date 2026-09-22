@@ -98,11 +98,24 @@ export function roundUpApplies(
  * DISCARDED (§27). One function returns the pair so no caller can write half
  * of it.
  *
- * `skipped` is the person tapping "Don't round it" on the step. Unlike the
- * ledger it needs no stored flag: the ledger recomputes rounding every time a
- * row is saved, so an opt-out there has to survive an edit (§1.19d-2), while a
- * Listly completion is written once and never recomputed. Nothing to
- * reconstruct, so nothing to store.
+ * `skipped` is the person tapping "Leave it at £7.50" on the step, and it is
+ * RETURNED for storing — not just used and discarded.
+ *
+ * 🚨 IT HAS TO BE STORED, and the first version of this file argued otherwise.
+ * The argument was: the ledger recomputes rounding every time a row is saved,
+ * so an opt-out THERE has to survive an edit (§1.19d-2), while a Listly
+ * completion is written once and never recomputed. True of the completion —
+ * and false of the TRANSACTION it becomes. The row is shared, and the ledger
+ * recomputes it on every save. Found in UAT 2026-09-22: a declined £4.25
+ * showed as "will round" in the ledger's form, and correcting that row's note
+ * would have booked it at £5.00. §1.19d-2's rule reaches across the app
+ * boundary.
+ *
+ * 🚨 ONLY AN EXPLICIT DECLINE SETS IT. A shop that did not round for any other
+ * reason — joint, pot, exact pound, backdated, or booked offline with no known
+ * setting — leaves it `false`, because the person declined nothing. Marking
+ * those would over-claim a decision, and would stop the ledger rounding a row
+ * it is entitled to round when the person later edits it there.
  */
 export function shopRoundUpFields(
   args: {
@@ -113,10 +126,14 @@ export function shopRoundUpFields(
     skipped?: boolean
   },
   state: RoundUpState,
-): { amount: number; roundedFrom: number | null; roundingPotId: string | null } {
+): { amount: number; roundedFrom: number | null; roundingPotId: string | null; roundUpSkipped: boolean } {
   const price = round2(args.amount)
-  if (args.skipped || !roundUpApplies({ ...args, amount: price }, state)) {
-    return { amount: price, roundedFrom: null, roundingPotId: null }
+  const couldRound = roundUpApplies({ ...args, amount: price }, state)
+  if (args.skipped || !couldRound) {
+    // `couldRound` is what separates "declined" from "never offered": the
+    // flag is true only when the step was really on screen and the person
+    // said no to it.
+    return { amount: price, roundedFrom: null, roundingPotId: null, roundUpSkipped: couldRound && !!args.skipped }
   }
-  return { amount: roundUpTarget(price), roundedFrom: price, roundingPotId: state.jarPotId }
+  return { amount: roundUpTarget(price), roundedFrom: price, roundingPotId: state.jarPotId, roundUpSkipped: false }
 }

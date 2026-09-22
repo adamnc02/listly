@@ -15,7 +15,12 @@
  * DISCARDS with no error anywhere in the app (MIGRATION-LESSONS §27) — the
  * shop would simply vanish.
  *
- * The third: the bridge computing rather than carrying. The trigger's only
+ * The third, found in UAT 2026-09-22: a DECLINE that is obeyed but not
+ * recorded. The ledger recomputes rounding from the rules every time a row is
+ * saved, so a declined shop with no `round_up_skipped` shows there as "will
+ * round" and is one unrelated edit away from being booked at £8.00.
+ *
+ * The fourth: the bridge computing rather than carrying. The trigger's only
  * judgement about the pair is the belt-and-braces location guard modelled
  * below; everything else it passes through exactly as Listly displayed it.
  *
@@ -44,6 +49,7 @@ interface CompletionRow {
   owner_id: string | null
   rounded_from: number | null
   rounding_pot_id: string | null
+  round_up_skipped: boolean
 }
 
 function completionRow(amount: number, location: LocationOption, state: RoundUpState, skipped = false): CompletionRow {
@@ -55,6 +61,7 @@ function completionRow(amount: number, location: LocationOption, state: RoundUpS
     owner_id: location.location === 'joint' ? null : location.ownerId,
     rounded_from: f.roundedFrom,
     rounding_pot_id: f.roundingPotId,
+    round_up_skipped: f.roundUpSkipped,
   }
 }
 
@@ -70,6 +77,7 @@ function ledgerRow(c: CompletionRow) {
     amount: c.amount,
     rounded_from: isPersonal ? c.rounded_from : null,
     rounding_pot_id: isPersonal ? c.rounding_pot_id : null,
+    round_up_skipped: isPersonal ? c.round_up_skipped : false,
   }
 }
 
@@ -113,6 +121,24 @@ const cases: CompletionRow[] = [
 ]
 check('🚨 every completion row satisfies the CHECK', cases.every(bothOrNeither))
 check('🚨 every ledger row satisfies the CHECK', cases.map(ledgerRow).every(bothOrNeither))
+
+// ── the decline reaches the ledger ────────────────────────────────────────
+// 🚨 This is the UAT 2026-09-22 bug. Without the flag the ledger's form shows
+// the row as "will round", and saving it after ANY other edit books £8.00.
+const declined = completionRow(7.5, personal, on, true)
+check('a declined shop books the real price', declined.amount === 7.5 && declined.rounded_from === null)
+check('🚨 and records the decline', declined.round_up_skipped === true)
+check('🚨 which the bridge carries into the ledger row', ledgerRow(declined).round_up_skipped === true)
+check('a shop that rounded carries no decline', ledgerRow(rounded).round_up_skipped === false)
+check('nor does an ordinary joint shop', ledgerRow(plain).round_up_skipped === false)
+// The ledger's own predicate checks this flag FIRST, before every other
+// clause — so modelling it here is modelling what the ledger will do.
+const ledgerWouldRound = (r: { round_up_skipped: boolean; rounded_from: number | null; amount: number }) =>
+  !r.round_up_skipped && r.rounded_from === null && Math.ceil(r.amount) > r.amount
+check(
+  '🚨 CONTROL: without the flag the ledger WOULD re-round that £7.50 on the next save',
+  ledgerWouldRound({ ...ledgerRow(declined), round_up_skipped: false }) && !ledgerWouldRound(ledgerRow(declined)),
+)
 
 // ── the ledger must never re-round what already arrived rounded ───────────
 // `amount` is already £8.00. Rounding the booked figure AGAIN takes £9.00 out

@@ -140,4 +140,12 @@ export interface ShopCompletionDraft {
    */
   roundedFrom: number | null
   roundingPotId: string | null
+  /**
+   * PROMPT-05 follow-up (UAT 2026-09-22). True only when the person saw the
+   * round-up step and chose "Leave it at £7.50". 🚨 It is carried into
+   * `transactions.round_up_skipped`, and it is what stops the LEDGER
+   * re-rounding this row the next time it is saved there — the ledger
+   * recomputes rounding on every save, and Listly does not.
+   */
+  roundUpSkipped: boolean
 }

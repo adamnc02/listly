@@ -472,18 +472,23 @@ to answer one yes/no question is the wrong trade. One read-only RPC,
 **together**, so no caller can write half a pair — both tables carry a both-or-neither CHECK, and a
 violated CHECK under PowerSync is a write discarded with no error.
 
-**"Leave it at £7.50" stores no flag today** — and 🐞 **UAT on 2026-09-22 showed that reasoning was
-incomplete.** The argument was: the ledger recomputes rounding every time a row is saved, so an
-opt-out *there* has to survive an edit (`APP-KNOWLEDGE.md §1.19d-2`), whereas a Listly completion is
-written once and never recomputed.
+**"Leave it at £7.50" is STORED**, on `shop_completions.round_up_skipped`, and carried into
+`transactions.round_up_skipped` (`20260922030000`).
 
-True of the completion — **but not of the transaction it becomes.** The row is shared, and the
-ledger recomputes it on every save. So a declined Listly shop arrives correctly at £4.25, and then
-the **ledger's** edit form shows its round-up checkbox **ticked**; edit anything else on that row
-and saving rounds it to £5.00. Nothing in Listly is wrong and nothing here needs changing yet —
-**the fix is being decided in `shared-finance-ledger/PROMPT-13a-round-up-ui-fixes.md` §0.2**, and
-one of the two options is for Listly to store the decline after all. Do not "fix" this side
-pre-emptively.
+🚨 **The first build did not store it, and UAT on 2026-09-22 proved that wrong.** The argument was:
+the ledger recomputes rounding every time a row is saved, so an opt-out *there* has to survive an
+edit (`APP-KNOWLEDGE.md §1.19d-2`), whereas a Listly completion is written once and never
+recomputed. True of the completion — **and false of the transaction it becomes.** The row is shared,
+and the ledger recomputes it on every save. A declined £4.25 arrived correctly, showed in the
+ledger's form as *"will round"*, and was one unrelated edit away from being booked at £5.00 with 75p
+in the jar. §1.19d-2's rule reaches across the app boundary.
+
+🚨 **Only an explicit decline sets the flag.** A shop that could never have rounded — joint, pot,
+exact pound, backdated, or booked offline with no known setting — leaves it false, because the
+person declined nothing. Marking those would over-claim a decision, and would stop the ledger
+rounding a row it is entitled to round when the person later edits it *there*.
+`shopRoundUpFields()` returns the flag with the pair, so the decision and the figures cannot
+disagree.
 
 `scripts/verify-shop-round-up.ts`, `verify-shop-completion-mapping.ts` and
 `verify-round-up-cache.ts` cover the rules, the journey into the ledger row, and every way the cache

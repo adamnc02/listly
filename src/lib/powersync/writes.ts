@@ -166,8 +166,8 @@ export async function insertShopCompletion(
     `INSERT INTO lst_shop_completions
        (id, household_id, list_id, list_name, completed_at, amount, spend_date,
         category_id, payment_method, location, owner_id, pot_id, items_snapshot,
-        rounded_from, rounding_pot_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'card', ?, ?, ?, ?, ?, ?)`,
+        rounded_from, rounding_pot_id, round_up_skipped)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'card', ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       householdId,
@@ -192,6 +192,9 @@ export async function insertShopCompletion(
       // rounded figure when these are set.
       draft.roundedFrom,
       toDbId(draft.roundingPotId ?? ''),
+      // 1/0, not true/false: SQLite holds booleans as integers, and
+      // toServerRecord turns this back into a real boolean on the way up.
+      draft.roundUpSkipped ? 1 : 0,
     ],
   )
   return id

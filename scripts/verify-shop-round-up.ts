@@ -115,10 +115,32 @@ check('🚨 every case writes both fields or neither', everyCase.every(pairOk))
 const jointShop = shopRoundUpFields({ amount: 7.5, location: joint, spendDate: TODAY, today: TODAY }, adamOn)
 check('a joint shop books £7.50 with no pair', jointShop.amount === 7.5 && jointShop.roundedFrom === null)
 
-// ── "don't round this one" ────────────────────────────────────────────────
+// ── "don't round this one", and the flag that has to survive it ───────────
 const skipped = shopRoundUpFields({ amount: 7.5, location: personal('adam'), spendDate: TODAY, today: TODAY, skipped: true }, adamOn)
 check('tapping “leave it” books the real price, no jar', skipped.amount === 7.5 && skipped.roundingPotId === null)
 check('and the step is still OFFERED, so it can be undone', applies(7.5, personal('adam'), adamOn))
+
+// 🚨 THE UAT 2026-09-22 BUG. The flag is what stops the LEDGER — which
+// recomputes rounding on every save — booking this row at £8.00 the next time
+// the person edits its note. Without it, a declined £7.50 ratchets up.
+check('🚨 a decline is RECORDED, not just obeyed', skipped.roundUpSkipped === true)
+const notSkipped = shopRoundUpFields({ amount: 7.5, location: personal('adam'), spendDate: TODAY, today: TODAY }, adamOn)
+check('a shop that DID round records no decline', notSkipped.roundUpSkipped === false)
+
+// 🚨 ONLY AN EXPLICIT DECLINE. Everything that simply could not round leaves
+// the flag false — the person declined nothing, and marking it would stop the
+// ledger rounding a row it is entitled to round when they later edit it there.
+const neverOffered: [string, ReturnType<typeof shopRoundUpFields>][] = [
+  ['a joint shop', shopRoundUpFields({ amount: 7.5, location: joint, spendDate: TODAY, today: TODAY, skipped: true }, adamOn)],
+  ['a pot shop', shopRoundUpFields({ amount: 7.5, location: pot, spendDate: TODAY, today: TODAY, skipped: true }, adamOn)],
+  ['an exact pound', shopRoundUpFields({ amount: 8, location: personal('adam'), spendDate: TODAY, today: TODAY, skipped: true }, adamOn)],
+  ['a BACKDATED shop', shopRoundUpFields({ amount: 7.5, location: personal('adam'), spendDate: YESTERDAY, today: TODAY, skipped: true }, adamOn)],
+  ['rounding switched off', shopRoundUpFields({ amount: 7.5, location: personal('adam'), spendDate: TODAY, today: TODAY, skipped: true }, ROUND_UP_OFF)],
+  ['no Coin Jar', shopRoundUpFields({ amount: 7.5, location: personal('adam'), spendDate: TODAY, today: TODAY, skipped: true }, noJar)],
+]
+for (const [name, fields] of neverOffered) {
+  check(`🚨 ${name} records NO decline, even with the flag set`, fields.roundUpSkipped === false)
+}
 
 // ── the pennies ───────────────────────────────────────────────────────────
 // The keypad can produce a float tail; the ledger column is numeric and a

@@ -86,11 +86,12 @@ The switch itself is not synced to Listly; one read-only RPC answers it, and the
 remembered per person so Finish shop still works with no signal. Anything unknown reads as "off".
 `TECHNICAL.md` §9a.
 
-> 🐞 **Known, and not Listly's bug** (found in UAT, 2026-09-22): a shop where you chose "leave it"
-> reaches the ledger correctly, but the **ledger's** own edit form shows its round-up checkbox
-> ticked, and re-saving that row there would round it. Tracked in
-> `shared-finance-ledger/PROMPT-13a-round-up-ui-fixes.md` — the fix may or may not land on this
-> side, so don't change anything here until §0.2 is answered.
+**"Leave it at £7.50" is remembered, not just obeyed.** UAT on 2026-09-22 found that a declined shop
+reached the ledger correctly and then showed there as *"will round"* — because the ledger recomputes
+rounding every time a row is saved, and Listly was not recording the answer. A declined £4.25 was
+one unrelated edit away from becoming £5.00. Listly now stores the decline and the bridge carries
+it. 🚨 **Only an explicit decline counts:** a shop that could never have rounded records nothing,
+because nothing was declined.
 
 ### Cancelling Finish shop changes nothing, and that is load-bearing.
 

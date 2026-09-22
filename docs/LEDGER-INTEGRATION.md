@@ -36,6 +36,7 @@ Every row is something a change on the ledger side could break with no error any
 | `pay_cycles.round_up_enabled` / `round_up_effective_from`, `pots.is_coin_jar` | Read by `round_up_state_for()`, called once per Current Account shop so Listly can round at pick time | Rename → the RPC errors, Listly falls back to its cached answer and then to "off": shops silently stop rounding |
 | `round_up_state_for(text, date)` | 🚨 **Added for Listly** (`20260921220000`). The only ledger fact Listly cannot get from its own mirror | Signature change → the same silent stop |
 | `transactions.rounded_from` / `rounding_pot_id` | 🚨 Listly now writes these too, **already set**. `amount` is already the rounded figure | The ledger app **re-rounding** a row that arrives with `rounded_from` set takes £9.00 out for a £7.50 shop |
+| `transactions.round_up_skipped` | Listly writes it when the person declines on the round-up step | Changing how the ledger reads it → a declined Listly shop silently rounds the next time it is saved there |
 | `transactions` | 🚨 **This table has a SECOND WRITER.** Listly's trigger inserts into it | A new CHECK value or a dropped column → `23514`/`42703`, caught by the trigger and shown as `ledger_error`, but the shop is not booked |
 | `powersync` publication, `powersync_role` | Shared by four apps | A second one → breaks everything (§6) |
 | Sync Stream output names | `lst_*` / `lst_ref_*` must not collide with `sfl_*` or personal-f's bare names | A collision merges two apps' rows into one local table, silently (§32) |
@@ -109,6 +110,7 @@ would need a second UPDATE, which is itself an upload.
 | `owner_id` | `new.owner_id`, **null when `location = 'joint'`** |
 | `pot_id` | only when `location = 'pot'`. `savings_pot_id` always null |
 | `rounded_from`, `rounding_pot_id` | `new.rounded_from` / `new.rounding_pot_id`, **carried verbatim** — and dropped unless `location = 'personal'` |
+| `round_up_skipped` | `new.round_up_skipped`, carried verbatim, same personal-only guard. 🚨 What stops the ledger re-rounding a declined shop on its next save |
 | `person_id`, `position`, everything else | `null` |
 
 Before inserting it checks household membership. RLS already enforces that on `shop_completions`;
@@ -184,13 +186,20 @@ implementation of `roundUpEnabledOn` in SQL is exactly the thing that drifts sil
 deliberate limitation, visible in the flow (change the date and the step disappears), not a bug. A
 backdated expense entered **in the ledger app** still rounds on its own date.
 
-🐞 **Open, found in UAT 2026-09-22 — for a LEDGER developer, not a Listly one.** A Listly shop that
-declined rounding carries `rounded_from = null` and **no** `round_up_skipped`, because Listly does
-not store the decline. The ledger's transaction form seeds its checkbox from that flag, so the row
-shows as *"will round"* and an unrelated edit re-saves it **rounded** — a declined £4.25 becomes
-£5.00. This is the one place the two apps' models genuinely disagree, and it is tracked in
-`shared-finance-ledger/PROMPT-13a-round-up-ui-fixes.md` §0.2, where one of the two candidate fixes
-is for Listly to store the decline after all.
+🚨 **A DECLINE IS CARRIED TOO** (`20260922030000`, from UAT on 2026-09-22). Listly's round-up step
+offers "Leave it at £4.25", and that answer is stored on `shop_completions.round_up_skipped` and
+written into `transactions.round_up_skipped`.
+
+**It has to be.** The ledger recomputes rounding from the rules **every time a row is saved**
+(`APP-KNOWLEDGE.md §1.19d-2`) and reads the opt-out from that column. Before this, a declined shop
+arrived correctly at £4.25, showed in the ledger's form as *"will round"*, and correcting that row's
+note would have booked it at £5.00 with 75p in the jar. PROMPT-05 had reasoned Listly needed no flag
+because a completion is never recomputed — true of the completion, false of the transaction it
+becomes. **Only one of the two apps recomputes the row, and that is the one that needs the flag.**
+
+**Only an explicit decline sets it.** A joint or pot shop, an exact pound, a backdated shop, or one
+booked while Listly had no signal all leave it null — the person declined nothing, and marking them
+would stop the ledger rounding a row it is entitled to round if they later edit it there.
 
 **Whose jar:** the `owner_id` of the **picked location**, never the signed-in user. In a two-person
 household Ella's Current Account shop rounds into **Ella's** jar, gated on **her** switch. Joint and
