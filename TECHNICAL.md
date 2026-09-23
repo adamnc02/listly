@@ -158,12 +158,39 @@ once it leaves the flow.
 
 ## 3. Design tokens and the stacking contract
 
-`src/index.css` is the design system, and its values are `LISTLY-DESIGN.md` §5 — the prototype's
-inline stylesheet restructured for the real build. **Listly has no dark mode**: the palette comes
-from the logo and the app is one cream surface by design, so there is no second theme to define.
+🚨 **`src/index.css` IS the design system — the file itself, not a document describing it.** It
+began as an external design brief's §5, inline in a clickable prototype; both are gone, and their
+content moved into that file's own header on 2026-09-23. **There is no second place to check a
+value against.** Change a token there and you have changed the design.
+
+**Listly has no dark mode.** The palette is taken from the **logo** — a rounded cream tile carrying
+a brown line-drawn house and a green leaf/"L" stroke — and the app is one cream surface by design,
+so there is no second theme to define. That is *why* these particular colours sit together:
+`--brown` is the house, `--sage` is the leaf, `--ground` is the tile. A new colour that does not
+come off that tile will look wrong beside them.
 
 Cream ground `#F5EFE6`, paper `#FFFCF7`, ink `#3B2F26`, a brown accent `#8A5E34`, a sage accent
 `#6F8C5E`, and one red `#B3362C` for overdue and error states, plus chip, done and grip tints.
+**Every token in `index.css` now carries what it is FOR**, which matters as much as the hex:
+`--muted`, `--soft` and `--brown-2` are near-neighbours that collapse into each other the moment
+someone picks one by eye instead of by role.
+
+### Type, and why every size looks too big
+
+The font is **Caveat** (Google Fonts, 400–700), used for **all** text — a readable handwritten
+fountain-pen look. Kalam and Patrick Hand were the alternatives considered.
+
+🚨 **Handwriting faces run small for their nominal size, so the whole scale is deliberately
+generous.** Do not "correct" it down to a conventional one: 26px of body text here is not 26px of
+body text anywhere else. The scale is in `index.css`'s header — 36 / 34 / 32 / 30 for the wordmark,
+page titles, sheet titles and list names; 26 for items and jobs; 22 / 21 / 18–20 for buttons, tab
+labels and chips.
+
+Two rules enforced across every component, in that same header with the radii and the sheet dim:
+
+- 🚨 **Every tap target is at least 44px.** This is a phone app used one-handed in a shop.
+- **Icons are line icons, 2px stroke, rounded caps.** `components/Icons.tsx` is the master (§20);
+  a new icon is drawn to match the twelve already there, never imported from a package.
 
 > 🚨 **`--ground-rgb` is an RGB triplet on purpose.** The edge fades must write their transparent
 > end as `rgba(<bg>, 0)` and **never** the `transparent` keyword: some browsers interpolate

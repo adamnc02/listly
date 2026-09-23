@@ -226,5 +226,17 @@ app's data.
 | `silver-octo-invention/docs/listly-SUPABASE.md` | The schema, RLS and functions, plus a generated ERD. |
 | `Downloads/App Development & Bug Tracking/listly/` | The build plan, prompts, Adam's dashboard tasks, app knowledge and the UAT scripts. |
 
-The planning documents (`LISTLY-DESIGN.md`, `listly-prototype.html`) deliberately do **not** live in
-this repo — they are design inputs, and their home is that Downloads folder.
+### The design brief and the prototype are gone, and nothing needs them
+
+Listly was built from an external design brief and a clickable prototype. While they existed, the
+code cited them **by section number** for every colour, size and screen rule — so a question about
+the design could only be answered by opening a file outside the repo. Everything still true was
+moved in on 2026-09-23:
+
+| What was in them | Where it is now |
+|---|---|
+| The palette, the type scale, the radii, the 44px rule, the icon rule | **`src/index.css`'s header — that file is the authority**, plus `TECHNICAL.md` §3 |
+| Every screen's behaviour and the rules it encodes | `TECHNICAL.md` §8–§16, module by module |
+| The prototype's twelve inline SVGs | `src/components/Icons.tsx`, the icon master |
+| The data model "as prototyped" | `src/types.ts`, and the real schema in `silver-octo-invention/docs/listly-SUPABASE.md` |
+| Its open questions — storage, sync, reminders, touch drag, hosting | All answered by building them: `docs/ARCHITECTURE.md`, `TECHNICAL.md` §17, §21, §22 |

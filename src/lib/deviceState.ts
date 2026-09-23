@@ -64,7 +64,7 @@ export function withDismissal(state: DeviceState, jobId: string, on: IsoDate = t
   return { ...state, dismissedBanners: { ...state.dismissedBanners, [jobId]: on } }
 }
 
-/** Editing and saving a job re-arms its banner (LISTLY-DESIGN.md §4). */
+/** Editing and saving a job re-arms its banner (TECHNICAL.md §13). */
 export function clearDismissal(state: DeviceState, jobId: string): DeviceState {
   if (!(jobId in state.dismissedBanners)) return state
   const next = { ...state.dismissedBanners }

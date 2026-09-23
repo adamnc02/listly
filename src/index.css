@@ -1,10 +1,13 @@
 /* ===========================================================================
-   Listly design system.
+   Listly design system. THIS FILE IS THE AUTHORITY.
 
-   Every token below is LISTLY-DESIGN.md §5, which is the authority. The
-   prototype (listly-prototype.html) is the same values inline; this file is
-   that stylesheet restructured for the real build, with the additions the
-   prototype could not have:
+   It began as an external design brief's §5, inline in a clickable prototype.
+   Both are gone; their content is here and in TECHNICAL.md §3. There is no
+   other document to check a colour or a size against — change a value here
+   and you have changed the design.
+
+   It is that stylesheet restructured for the real build, with the additions
+   the prototype could not have:
 
      - the JS-measured --app-height / --safe-top / --safe-bottom from
        index.html, preferred over bare 100dvh/env();
@@ -14,25 +17,66 @@
      - touch-drag states (.row.dragging / .row.shifted), which the
        prototype's desktop-only HTML5 drag did not need.
 
-   Listly has no dark mode. The palette is taken from the logo and the app is
-   one cream surface by design, so there is no second theme to define.
+   Listly has no dark mode. The palette is taken from the LOGO — a rounded
+   cream tile carrying a brown line-drawn house and a green leaf/"L" stroke —
+   and the app is one cream surface by design, so there is no second theme to
+   define. That is why these colours sit together: --brown IS the house,
+   --sage IS the leaf, --ground IS the tile. A new colour that does not come
+   off that tile will look wrong next to them.
+
+   THE TYPE SCALE, and why it reads large
+
+   The font is Caveat (Google Fonts, weights 400-700), used for ALL text, for
+   a readable handwritten fountain-pen look. Kalam and Patrick Hand were the
+   alternatives considered.
+
+   🚨 Handwriting faces run SMALL for their nominal size, so every size below
+   is deliberately more generous than it would be in a system font. Do not
+   "correct" them down to a conventional scale: they are set against Caveat's
+   own x-height, and 26px of body text here is not 26px of body text anywhere
+   else.
+
+     App name "Listly"   36px / 700      Buttons          22px / 700
+     Page titles         34px / 700      Tab labels       21px / 700
+     Sheet titles        32px / 700      Chips and hints  18-20px
+     List names          30px / 700
+     Items and jobs      26px / 400
+
+   SHAPE AND LAYOUT, stated once so it is not re-derived per component
+
+     - Cards and the due-soon banner: 16-18px radius, 1.5px --line border.
+     - Bottom sheets: 26px top radius, over a dimmed rgba(59,47,38,.4).
+     - Checkboxes: 26px rounded squares, 8px radius, 2.4px border, white tick.
+     - Pills and buttons are fully rounded.
+     - 🚨 Every tap target is at least 44px. This is a phone app used
+       one-handed in a shop; it is a rule, not a preference.
+     - Icons are simple line icons, 2px stroke, rounded caps — see Icons.tsx,
+       which is the icon master.
+     - The header is the logo (46px, 13px radius) and "Listly", with today's
+       date underneath.
+     - The tab bar is three equal tabs, an icon above a label; the active tab
+       is filled --brown with white text.
    =========================================================================== */
 
 :root {
-  /* Colours — LISTLY-DESIGN.md §5 */
-  --ground: #F5EFE6;
-  --paper: #FFFCF7;
-  --ink: #3B2F26;
-  --muted: #7A6A5C;
-  --soft: #5E4F43;
-  --brown: #8A5E34;
-  --brown-2: #7A5430;
-  --sage: #6F8C5E;
-  --sage-light: #A9BB9C;
-  --sage-wash: #EDF2E6;
-  --line: #E6DCCD;
-  --line-2: #D9CBB8;
-  --red: #B3362C;
+  /* Colours, and what each one is FOR. The job matters as much as the hex:
+     --muted, --soft and --brown-2 are near-neighbours that would collapse
+     into each other if picked by eye rather than by role. */
+  --ground: #F5EFE6;      /* app background — the logo tile's cream */
+  --paper: #FFFCF7;       /* cards, sheets, tab bar */
+  --ink: #3B2F26;         /* main text */
+  --muted: #7A6A5C;       /* secondary text, hints */
+  --soft: #5E4F43;        /* labels, the Done header */
+  --brown: #8A5E34;       /* page titles, primary buttons, active tab, the
+                             default star — the logo's house */
+  --brown-2: #7A5430;     /* inactive tab text, due-chip text */
+  --sage: #6F8C5E;        /* ticked boxes, add/save buttons, reminder ON —
+                             the logo's leaf */
+  --sage-light: #A9BB9C;  /* unticked checkbox outline */
+  --sage-wash: #EDF2E6;   /* count pills, drag-over highlight */
+  --line: #E6DCCD;        /* card borders, dividers */
+  --line-2: #D9CBB8;      /* input underlines, dashed "add" boxes */
+  --red: #B3362C;         /* due-soon banner, delete actions */
   /* 🚨 An RGB triplet, because the edge fades must write their transparent
      end as rgba(<bg>, 0) and NEVER the `transparent` keyword: some browsers
      interpolate `transparent` through transparent-BLACK, and the gradient
@@ -42,15 +86,18 @@
      leaves the flow. */
   --nav-h: 78px;
 
-  --chip-bg: #F1E6D7;
-  --chip-soon-bg: #FBE6E3;
-  --chip-soon-ink: #9E2A21;
-  --done-card: #EFE7DB;
-  --done-item: #8C7C6E;
-  --done-job: #7E6E60;
-  --pill-ink: #5C7A4C;
-  --grip: #C9B9A6;
-  --bell-off: #B5A594;
+  /* Chip, done and grip tints. A due chip has TWO states and they are two
+     pairs, not one colour plus opacity — the red pair has to stay legible
+     when it is the thing telling you a job is overdue. */
+  --chip-bg: #F1E6D7;      /* normal due chip background (text: --brown-2) */
+  --chip-soon-bg: #FBE6E3; /* due-within-3-days chip background */
+  --chip-soon-ink: #9E2A21;/* …and its text */
+  --done-card: #EFE7DB;    /* the Done section's background */
+  --done-item: #8C7C6E;    /* ticked shopping items */
+  --done-job: #7E6E60;     /* done jobs, struck through */
+  --pill-ink: #5C7A4C;     /* count-pill text on --sage-wash */
+  --grip: #C9B9A6;         /* the drag handle */
+  --bell-off: #B5A594;     /* reminder OFF (ON is white on --sage) */
 
   /* Fallbacks only. index.html overwrites these with measured pixels on
      first paint; see its comment for why the CSS values cannot be trusted
@@ -115,7 +162,7 @@ body {
 button, input { font-family: inherit; color: inherit; }
 button { cursor: pointer; }
 
-/* Every tap target in the app is >= 44px (LISTLY-DESIGN.md §5), so the
+/* Every tap target in the app is >= 44px (see the header), so the
    300ms tap highlight is pure noise. */
 button, .row, .listhead { -webkit-tap-highlight-color: transparent; }
 

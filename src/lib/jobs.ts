@@ -23,8 +23,9 @@ export function daysUntil(iso: IsoDate): number {
   return Math.round((due.getTime() - today.getTime()) / MS_PER_DAY)
 }
 
-/** "Due within 3 days or overdue" — the rule for both the red chip and the
- *  due-soon banner (LISTLY-DESIGN.md §3 and §4). */
+/** "Due within 3 days or overdue" — ONE rule, feeding both the red due chip
+ *  and the due-soon banner (TECHNICAL.md §12, §13). They must never drift:
+ *  a chip that is red while no banner shows reads as a bug in the banner. */
 export function isDueSoon(iso: IsoDate): boolean {
   return iso !== '' && daysUntil(iso) <= 3
 }
@@ -49,9 +50,9 @@ export function dueLabel(iso: IsoDate): string {
 }
 
 /**
- * Open jobs: dated first, soonest first; undated after them
- * (LISTLY-DESIGN.md §3). `sort` is given a copy — sorting the array in
- * place would mutate context state.
+ * Open jobs: dated first, soonest first; undated after them (TECHNICAL.md
+ * §12). `sort` is given a copy — sorting the array in place would mutate
+ * context state.
  */
 export function sortOpenJobs(jobs: Job[]): Job[] {
   return [...jobs].sort((a, b) => {

@@ -4,7 +4,7 @@ import { Sheet } from './Sheet'
 
 /**
  * Tap an item's text to rename it, delete it, or move it to another list
- * (LISTLY-DESIGN.md §2). There is deliberately no drag-between-lists: this
+ * (TECHNICAL.md §11). There is deliberately no drag-between-lists: this
  * sheet is the move mechanism.
  *
  * Picking a chip and typing a new list name are mutually exclusive — either

@@ -18,7 +18,7 @@ export type Tab = 'shopping' | 'house' | 'mine'
  * The app shell: header, due-soon banners, the current tab, the tab bar.
  *
  * The banners sit here rather than on the jobs pages because they show on
- * EVERY tab (LISTLY-DESIGN.md §4) — a job due tomorrow needs to reach you
+ * EVERY tab (TECHNICAL.md §13) — a job due tomorrow needs to reach you
  * while you are looking at the shopping list.
  *
  * The logo is referenced from public/apple-touch-icon.png, not embedded as
@@ -52,9 +52,9 @@ function Shell() {
   return (
     <div className="app">
       {/* Brand hard left, account hard right (Adam, 2026-09-20). The date
-          that LISTLY-DESIGN.md §5 puts under the wordmark is deliberately
-          gone: every screen already says what it is, and the due chips carry
-          the only dates that matter. */}
+          the original design put under the wordmark is deliberately gone:
+          every screen already says what it is, and the due chips carry the
+          only dates that matter. */}
       <header>
         <img src={icon} alt="" />
         <div className="brand grow">Listly</div>

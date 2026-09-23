@@ -3,7 +3,8 @@ import { createPortal } from 'react-dom'
 import type { ReactNode } from 'react'
 
 /**
- * A bottom sheet over a dimmed background (LISTLY-DESIGN.md §5).
+ * A bottom sheet over a dimmed background: 26px top radius over
+ * rgba(59,47,38,.4), per src/index.css's header.
  *
  * 🚨 It renders through createPortal to document.body, from the very first
  * one, and never as a plain fixed/absolute div inside the page.

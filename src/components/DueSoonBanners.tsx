@@ -6,7 +6,7 @@ import { Close, Warn } from './Icons'
 const SHORT = { house: 'House job', mine: 'My job' } as const
 
 /**
- * The red due-soon banners (LISTLY-DESIGN.md §4).
+ * The red due-soon banners (TECHNICAL.md §13).
  *
  * Every OPEN job on either page that is due within 3 days or overdue gets
  * one, on EVERY tab — that is why this sits in App.tsx above the router,
