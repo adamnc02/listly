@@ -4,7 +4,7 @@ import { Sheet } from './Sheet'
 import { Star, StarFilled, Trash } from './Icons'
 
 /**
- * Manage lists (LISTLY-DESIGN.md §2). Shows EVERY list, hidden ones
+ * Manage lists (TECHNICAL.md §10). Shows EVERY list, hidden ones
  * included — that is the whole point of the sheet: a list that hides itself
  * when empty still exists, and this is where you find it.
  *

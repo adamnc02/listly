@@ -1,9 +1,10 @@
 /**
  * The prototype's inline SVGs as components.
  *
- * LISTLY-DESIGN.md §5: "simple line icons (2px stroke, rounded caps)". Every
- * path below is copied from listly-prototype.html so the real build is the
- * same drawing, not a lookalike from an icon package. They are inline rather
+ * 🚨 THE ICON RULE, and this file is where it lives: simple LINE icons, 2px
+ * stroke, rounded caps. An icon that does not follow it will not sit with the
+ * rest. Every path below was drawn for this app rather than taken from an
+ * icon package, so a new one is drawn to match these, not imported. Inline rather
  * than a sprite or a dependency because there are twelve of them and they
  * never change.
  */

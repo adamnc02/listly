@@ -1,11 +1,12 @@
 /**
  * Listly's domain types.
  *
- * These are the app's shapes, not the database's. They are deliberately
- * close to LISTLY-DESIGN.md §6 "Data model (as prototyped)" so the
- * prototype's behaviour can be reproduced exactly, and close to
- * PROMPT-01 §5's tables so Phase 2's mapping layer is a rename rather than
- * a redesign. Where they differ from §5, the reason is written down here.
+ * These are the app's shapes, not the database's. They deliberately stayed
+ * close to the original prototype's data model, so its behaviour could be
+ * reproduced exactly, and close to the planned tables so the sync mapping
+ * layer was a rename rather than a redesign. Both of those are now built and
+ * these types are the authority; where a shape looks odd, the reason is
+ * written down beside it.
  */
 
 export type JobPage = 'house' | 'mine'
@@ -31,9 +32,10 @@ export interface List {
   createdAt: IsoDate
   /**
    * "Just created, has never held an item" — the list stays visible while
-   * empty until its first item arrives (LISTLY-DESIGN.md §2: "A list you've
-   * just created is shown even though it's empty... Once it has had items
-   * and is emptied, the normal hide rule applies").
+   * empty until its first item arrives. The rule, in full: a list you have
+   * just created is shown even though it is empty, so you can add its first
+   * items; once it has held items and is emptied, the normal hide rule
+   * applies (TECHNICAL.md §8).
    *
    * 🚨 This is NOT derivable from `created_at`, which is what PROMPT-01 §5.1
    * assumes. `created_at` can express "made recently"; it cannot express

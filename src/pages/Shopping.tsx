@@ -30,7 +30,7 @@ export function Shopping() {
     }
     setHint(null)
     // The dashed box at the bottom of the page makes a NON-default list
-    // (LISTLY-DESIGN.md §2). Manage lists is where default ones are made.
+    // (TECHNICAL.md §8). Manage lists is where default ones are made.
     void addList(name, false)
       .then(() => setDraft(''))
       .catch((e: unknown) => setHint(`Couldn't add it: ${e instanceof Error ? e.message : String(e)}`))

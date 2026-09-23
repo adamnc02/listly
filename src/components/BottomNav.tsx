@@ -3,7 +3,7 @@ import { Basket, House, Me } from './Icons'
 
 /**
  * Three equal tabs, icon above label, the active one filled brown with
- * white text (LISTLY-DESIGN.md §5).
+ * white text — the tab-bar rule in src/index.css's header.
  *
  * No router: three tabs with no deep links, no back-button semantics worth
  * having and no URLs to share. `position: fixed` is likewise avoided — the

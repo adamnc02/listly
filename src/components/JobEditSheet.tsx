@@ -5,7 +5,7 @@ import { Sheet } from './Sheet'
 const PAGE_TITLE = { house: 'House jobs', mine: 'My jobs' } as const
 
 /**
- * Tap a job to edit its text, due date and reminder (LISTLY-DESIGN.md §3).
+ * Tap a job to edit its text, due date and reminder (TECHNICAL.md §12).
  *
  * The reminder checkbox appears only when a due date is set, and clearing
  * the date turns the reminder off — a reminder fires three days before a

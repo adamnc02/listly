@@ -8,9 +8,9 @@ import { Bell, Chevron, Tick } from '../components/Icons'
 const TITLE: Record<JobPage, string> = { house: 'House jobs', mine: 'My jobs' }
 
 /**
- * House jobs and My jobs are the same page with different data
- * (LISTLY-DESIGN.md §3: "The two pages are identical in behaviour; each has
- * its own jobs"), so they are ONE component parameterised by `page`.
+ * House jobs and My jobs are the same page with different data — the two
+ * pages are identical in behaviour and each has its own jobs (TECHNICAL.md
+ * §12) — so they are ONE component parameterised by `page`.
  *
  * That mirrors the backend deliberately. PROMPT-01 §5.4 keeps `house_jobs`
  * and `my_jobs` as two tables rather than one table with a `page` column,
