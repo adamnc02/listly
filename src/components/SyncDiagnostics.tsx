@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react'
 import { Sheet } from './Sheet'
 import { supabase } from '../lib/supabaseClient'
 import { powerSyncDb, LISTLY_STREAM, LISTLY_REF_STREAM } from '../lib/powersync/database'
-import { readBootLog } from '../lib/powersync/bootLog'
+import { readBootLog, readPreviousBoot } from '../lib/powersync/bootLog'
 import { describeSyncError } from '../lib/powersync/describeSyncError'
+import { useSyncHealth } from '../lib/powersync/useSyncHealth'
 
 /**
  * "Why isn't it syncing?", answered in plain English inside the app.
@@ -17,6 +18,21 @@ import { describeSyncError } from '../lib/powersync/describeSyncError'
  *
  * Each check says what it means and what to do, in order, and stops at the
  * first real failure so there is exactly one thing to act on.
+ *
+ * 🚨 Rebuilt 2026-09-21 (Adam: "I see sync failed, but all steps are
+ * passed … this should be suitable for users, but still useful for
+ * troubleshooting"):
+ *   - The answer at the top comes from lib/syncHealth.ts — the SAME rule as
+ *     the header dot — unless one of the active checks below has failed, in
+ *     which case that check's fix is the answer. The two can no longer
+ *     disagree.
+ *   - Everything else is under "Details for troubleshooting", closed by
+ *     default: the checks, PowerSync's live state (including a stale error,
+ *     labelled as such), and the startup steps. Still all there for a
+ *     screenshot; not in the way of someone who only wants to know "is it
+ *     OK?".
+ *   - Nothing can push the sheet wider than the phone: long values wrap
+ *     (.diag), and the sync server is shown by host, not full URL.
  */
 
 type Check = {
@@ -26,6 +42,13 @@ type Check = {
 }
 
 const PS_URL: string = import.meta.env.VITE_POWERSYNC_URL ?? ''
+const PS_HOST = (() => {
+  try {
+    return new URL(PS_URL).host
+  } catch {
+    return PS_URL
+  }
+})()
 
 export function SyncDiagnostics({ onClose }: { onClose: () => void }) {
   const [checks, setChecks] = useState<Check[]>([])
@@ -82,7 +105,7 @@ export function SyncDiagnostics({ onClose }: { onClose: () => void }) {
         push({
           label: 'Sync server reachable',
           state: res.ok ? 'ok' : 'fail',
-          detail: res.ok ? PS_URL : `${PS_URL} answered ${res.status}`,
+          detail: res.ok ? PS_HOST : `${PS_HOST} answered ${res.status}`,
         })
         if (!res.ok) {
           if (!cancelled) setDone(true)
@@ -93,7 +116,7 @@ export function SyncDiagnostics({ onClose }: { onClose: () => void }) {
           label: 'Sync server reachable',
           state: 'fail',
           detail:
-            `Could not reach ${PS_URL} from this browser (${e instanceof Error ? e.message : String(e)}). ` +
+            `Could not reach ${PS_HOST} from this browser (${e instanceof Error ? e.message : String(e)}). ` +
             'If the address is right, something between this browser and the server is blocking it.',
         })
         if (!cancelled) setDone(true)
@@ -144,24 +167,20 @@ export function SyncDiagnostics({ onClose }: { onClose: () => void }) {
         })
       }
 
-      // 5. What PowerSync itself thinks, right now.
+      // 5. Is it actually connected? PowerSync's own live state — including
+      // any error — is shown separately below, from the same source as the
+      // header dot, rather than re-judged here.
       const st = powerSyncDb.currentStatus
       push({
-        label: 'PowerSync connection',
-        state: st?.connected ? 'ok' : 'fail',
+        label: 'Connected to the sync service',
+        // Not a failure on its own: offline is a normal state for an app
+        // built for a shop with no signal. syncHealth() judges it.
+        state: st?.connected ? 'ok' : 'skip',
         detail: st?.connected
-          ? `Connected. Last synced ${st.lastSyncedAt?.toLocaleTimeString('en-GB') ?? 'not yet'}.`
-          : `Not connected. ${
-              st?.downloadError || st?.uploadError
-                ? describeSyncError(st.downloadError ?? st.uploadError)
-                : 'No error reported.'
-            }`,
-      })
-
-      push({
-        label: 'Streams subscribed',
-        state: 'skip',
-        detail: `${LISTLY_STREAM} and ${LISTLY_REF_STREAM} — these must exist in the PowerSync dashboard under Sync Streams.`,
+          ? 'Yes.'
+          : st?.downloadError
+            ? describeSyncError(st.downloadError)
+            : 'Not right now. If you have signal, close Listly fully and reopen it.',
       })
 
       if (!cancelled) setDone(true)
@@ -175,94 +194,137 @@ export function SyncDiagnostics({ onClose }: { onClose: () => void }) {
 
   const firstFail = checks.find((c) => c.state === 'fail')
   const boot = readBootLog()
+  const previous = readPreviousBoot()
+  const { facts, health } = useSyncHealth()
+  const err = facts.downloadError ?? facts.uploadError
+  // An upload error with nothing waiting is history (lib/syncHealth.ts).
+  const stale = !facts.downloadError && !!facts.uploadError && (facts.waiting ?? 0) === 0
+
+  // A failed check is the answer — unless the phone is simply offline, when
+  // "could not reach the server" is the expected consequence, not a fault.
+  const verdict =
+    firstFail && health.tone !== 'offline'
+      ? { tone: 'problem', headline: 'Something needs fixing', detail: firstFail.detail }
+      : health
+  const border =
+    verdict.tone === 'problem' ? 'var(--red)' : verdict.tone === 'ok' ? 'var(--sage)' : 'var(--line-2)'
+  const dot = (state: string) =>
+    state === 'ok' ? 'var(--sage)' : state === 'fail' ? 'var(--red)' : 'var(--line-2)'
 
   return (
     <Sheet label="Sync check" onClose={onClose}>
-      <h2>Sync check</h2>
+      <div className="diag">
+        <h2>Sync check</h2>
 
-      {/* The verdict goes FIRST. On 2026-09-20 it was at the bottom and
-          Adam could not see it — the one line that mattered was the one
-          that scrolled off. */}
-      {done && (
-        <div className="card" style={{ padding: 14, borderColor: firstFail ? 'var(--red)' : 'var(--sage)' }}>
-          <div className="lbl" style={{ marginBottom: 4 }}>
-            {firstFail ? 'What to do' : 'All good'}
-          </div>
-          <p className="help" style={{ margin: 0 }}>
-            {firstFail
-              ? firstFail.detail
-              : 'Everything the app can check is working. If it still is not syncing, the two streams may not be deployed in the PowerSync dashboard.'}
-          </p>
+        {/* The answer goes FIRST, in plain words. On 2026-09-20 it was at
+            the bottom and Adam could not see it. */}
+        <div className="card diag-verdict" style={{ borderColor: border }}>
+          <div className="lbl">{done || firstFail ? verdict.headline : 'Checking…'}</div>
+          <p className="help">{done || firstFail ? verdict.detail : 'This takes a few seconds.'}</p>
         </div>
-      )}
 
-      <p className="help" style={{ marginTop: 0 }}>
-        This runs the checks itself. You don’t need to read any logs — just send whatever it says
-        below.
-      </p>
-
-      <div>
-        {checks.map((c) => (
-          <div className="mrow" key={c.label}>
-            <span
-              className="dot"
-              style={{
-                width: 12,
-                height: 12,
-                borderRadius: '50%',
-                flexShrink: 0,
-                marginRight: 4,
-                background:
-                  c.state === 'ok'
-                    ? 'var(--sage)'
-                    : c.state === 'fail'
-                      ? 'var(--red)'
-                      : 'var(--line-2)',
-              }}
-            />
-            <div className="grow">
-              <div className="nm" style={{ fontSize: 22 }}>{c.label}</div>
-              <div className="st">{c.detail}</div>
-            </div>
-          </div>
-        ))}
-        {!done && <p className="help">Checking…</p>}
-      </div>
-
-      {/* What the boot sequence actually did. PowerSync's own status only
-          describes the CONNECTION — it cannot say that connect() was never
-          reached, which is exactly the gap that made "Not connected. No
-          error reported." undiagnosable. */}
-      <div>
-        <div className="lbl">Startup steps</div>
-        {boot.length === 0 && (
-          <p className="help" style={{ marginTop: 4 }}>
-            Nothing recorded — the sync startup never ran. Reload the page with this open.
+        <details className="diag-details">
+          <summary>Details for troubleshooting</summary>
+          <p className="help">
+            If someone is helping you with sync, screenshot everything below and send it to them.
           </p>
-        )}
-        {boot.map((b, i) => (
-          <div className="mrow" key={i}>
-            <span
-              className="dot"
-              style={{
-                width: 10, height: 10, borderRadius: '50%', flexShrink: 0, marginRight: 4,
-                background:
-                  b.level === 'ok' ? 'var(--sage)' : b.level === 'fail' ? 'var(--red)' : 'var(--line-2)',
-              }}
-            />
-            <div className="grow">
-              <div className="st" style={{ fontSize: 19 }}>
-                {b.at} · {b.step}
+
+          <div className="lbl">Checks</div>
+          {checks.map((c) => (
+            <div className="mrow" key={c.label}>
+              <span className="diag-dot" style={{ background: dot(c.state) }} />
+              <div className="grow">
+                <div className="nm">{c.label}</div>
+                <div className="st">{c.detail}</div>
               </div>
-              {b.detail && <div className="st">{b.detail}</div>}
+            </div>
+          ))}
+          {!done && <p className="help">Checking…</p>}
+
+          <div className="lbl">Right now</div>
+          <div className="mrow">
+            <span className="diag-dot" style={{ background: facts.connected ? 'var(--sage)' : 'var(--line-2)' }} />
+            <div className="grow">
+              <div className="nm">{facts.connected ? 'Connected' : facts.connecting ? 'Connecting' : 'Not connected'}</div>
+              <div className="st">
+                Last synced {facts.lastSyncedAt?.toLocaleTimeString('en-GB') ?? 'not yet on this device'}
+              </div>
             </div>
           </div>
-        ))}
-      </div>
+          <div className="mrow">
+            <span
+              className="diag-dot"
+              style={{ background: (facts.waiting ?? 0) === 0 ? 'var(--sage)' : 'var(--brown-2)' }}
+            />
+            <div className="grow">
+              <div className="nm">Changes waiting to send</div>
+              <div className="st">{facts.waiting ?? '…'}</div>
+            </div>
+          </div>
+          {err !== undefined && err !== null && (
+            <div className="mrow">
+              <span className="diag-dot" style={{ background: stale ? 'var(--line-2)' : 'var(--red)' }} />
+              <div className="grow">
+                <div className="nm">{stale ? 'Earlier sync hiccup' : 'Sync error'}</div>
+                <div className="st">
+                  {describeSyncError(err)}
+                  {stale && ' Nothing is waiting to send, so this is not affecting anything.'}
+                </div>
+              </div>
+            </div>
+          )}
+          <div className="mrow">
+            <span className="diag-dot" style={{ background: 'var(--line-2)' }} />
+            <div className="grow">
+              <div className="nm">Sync streams</div>
+              <div className="st">
+                {LISTLY_STREAM}, {LISTLY_REF_STREAM} — both must be deployed under Sync Streams in the
+                PowerSync dashboard.
+              </div>
+            </div>
+          </div>
 
-      <div className="actions">
-        <div style={{ flex: 1 }} />
-        <button className="btn sage" onClick={onClose}>Close</button>
+          {/* What the boot sequence actually did. PowerSync's own status only
+              describes the CONNECTION — it cannot say that connect() was never
+              reached, which is exactly the gap that made "Not connected. No
+              error reported." undiagnosable. */}
+          <div className="lbl">Startup steps</div>
+          {boot.length === 0 && (
+            <p className="help">Nothing recorded — the sync startup never ran. Close Listly fully and reopen it.</p>
+          )}
+          {boot.map((b, i) => (
+            <div className="mrow" key={i}>
+              <span className="diag-dot" style={{ background: dot(b.level) }} />
+              <div className="grow">
+                <div className="st">
+                  {b.at} · {b.step}
+                </div>
+                {b.detail && <div className="st">{b.detail}</div>}
+              </div>
+            </div>
+          ))}
+          {previous && (
+            <>
+              <div className="lbl">The start-up before this one ({previous.why})</div>
+              {previous.steps.map((b, i) => (
+                <div className="mrow" key={`p${i}`}>
+                  <span className="diag-dot" style={{ background: dot(b.level) }} />
+                  <div className="grow">
+                    <div className="st">
+                      {b.at} · {b.step}
+                    </div>
+                    {b.detail && <div className="st">{b.detail}</div>}
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+        </details>
+
+        <div className="actions">
+          <div style={{ flex: 1 }} />
+          <button className="btn sage" onClick={onClose}>Close</button>
+        </div>
       </div>
     </Sheet>
   )

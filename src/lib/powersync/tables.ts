@@ -105,6 +105,15 @@ export const SYNCED_TABLES: SyncedTable[] = [
     // foreign key: Finish shop deletes those item rows, and the point of a
     // snapshot is that it outlives them.
     items_snapshot: 'text',
+    // PROMPT-05. The real price of a shop that rounded up, and the Coin Jar
+    // its uplift feeds. `amount` above is ALREADY the rounded figure. Both
+    // set or both null; the bridge trigger carries them into
+    // shared_finance_ledger.transactions and computes nothing.
+    rounded_from: 'real', rounding_pot_id: 'text',
+    // The person's explicit "leave it as it is" on the round-up step. Carried
+    // to transactions.round_up_skipped so the ledger — which recomputes
+    // rounding on every save — does not undo their answer.
+    round_up_skipped: 'bool',
     // Written by the ledger-bridge trigger, never by the app. Synced so the
     // UI can show "couldn't add to the ledger — tap to retry" instead of
     // failing silently, which is the failure mode this workstream keeps

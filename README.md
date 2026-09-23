@@ -65,6 +65,35 @@ a lie whenever there is no signal (`TECHNICAL.md` §9).
 
 `docs/LEDGER-INTEGRATION.md` is the full picture, and the page a *ledger* developer should read.
 
+### A Current Account shop rounds up, and Listly decides it — not the database.
+
+A £7.50 Current Account shop is booked as **£8.00**, remembering the real price, and the 50p funds
+that person's Coin Jar in the ledger — the same thing the ledger's own entry does. Three rules:
+
+- **The person sees it before the shop is booked.** A round-up step appears in Finish shop, showing
+  the real price, the rounded figure and where the difference goes. The trigger **carries** those
+  values and computes nothing, so the booked row cannot contradict the screen that was tapped.
+- **It appears only when it really applies** — a Current Account shop, dated today, not already a
+  whole pound, for a person whose round-ups are on and who has a Coin Jar. Otherwise it shows
+  nothing at all. 🚨 It is the **owner of the picked account's** switch and jar, never the
+  signed-in user's.
+- 🚨 **A future-dated shop never rounds**, because it books as pending and the switch may change
+  before it happens. A **backdated** one does round, judged against the rule that was in force on
+  its own date — Listly resolves the ledger's dated on/off history the same way the ledger does.
+  It did not at first, and switching round-ups off "from the 24th" made Listly stop rounding
+  immediately while the ledger kept going until the 24th. Found in UAT, 2026-09-22.
+
+The switch itself is not synced to Listly; one read-only RPC answers it, and the answer is
+remembered per person so Finish shop still works with no signal. Anything unknown reads as "off".
+`TECHNICAL.md` §9a.
+
+**"Leave it at £7.50" is remembered, not just obeyed.** UAT on 2026-09-22 found that a declined shop
+reached the ledger correctly and then showed there as *"will round"* — because the ledger recomputes
+rounding every time a row is saved, and Listly was not recording the answer. A declined £4.25 was
+one unrelated edit away from becoming £5.00. Listly now stores the decline and the bridge carries
+it. 🚨 **Only an explicit decline counts:** a shop that could never have rounded records nothing,
+because nothing was declined.
+
 ### Cancelling Finish shop changes nothing, and that is load-bearing.
 
 Nothing is deleted until the outcome is known — Save and "Don't price it" clear the ticked items,
@@ -115,6 +144,33 @@ debugging on "Add list did nothing".
 🚩 The rule is `.waiting`, **unscoped**. It used to be `.btn.waiting`, which silently excluded the
 round `+` add-item button (an `.icon-btn`), so that button carried the class and got no styling at
 all for a week.
+
+### A different account signing in clears the device first.
+
+PowerSync keeps its on-device database across a sign-out. Before 2026-09-21 nothing cleared it, so
+the next account on a phone was shown the previous one's lists **and private My jobs** until enough
+relaunches let its own sync replace them (Adam: "the old list remains, it takes several force
+closes"). `SyncRoot` now remembers the last account on the device and, when a **different** one
+signs in, calls `disconnectAndClear()` before anything reads the database — the rule
+`shared-finance-ledger` has always had (`lib/accountSwitch.ts`, `scripts/verify-account-switch.ts`).
+The same account signing back in keeps its data, unsent changes included; the Account sheet warns
+before a sign-out would leave changes unsent. **Don't remove it, and don't make sign-out clear the
+device either** — that would lose unsent changes for the common case of signing straight back in.
+
+### The service worker has no `fetch` handler.
+
+`public/sw.js` exists for push notifications only. A service worker that caches is how a PWA gets
+stuck on an old build permanently — every deploy silently fails to reach the phone. Listly is
+offline-first through PowerSync's local database, not through a cache, so it needs none. **Adding
+a `fetch` handler needs a versioning and update plan first**, tested against upgrading from the
+deployed build.
+
+### Reminders are push only, so Settings must tell the truth per device.
+
+There is no email fallback (Adam, 2026-09-21). A phone that is not on the Home Screen with
+permission granted is simply not reminded, and the Reminders section says so rather than showing a
+button. A device reads "gets reminders" only when the **server** has its registration, never from
+the browser's own subscription alone (`TECHNICAL.md` §22).
 
 ## Running it
 

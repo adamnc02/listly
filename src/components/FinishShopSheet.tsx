@@ -1,6 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useListly, type ShopSnapshot } from '../context/ListlyContext'
 import { defaultCategoryId } from '../lib/powersync/ledger'
+import { useRoundUpState } from '../lib/powersync/roundUpState'
+import { roundUpApplies, roundUpTarget, roundUpUplift, shopRoundUpFields } from '../lib/roundUp'
 import { useHouseholdId } from './SyncRoot'
 import { todayIso } from '../lib/date'
 import { Sheet } from './Sheet'
@@ -10,8 +12,21 @@ import type { IsoDate, LocationOption } from '../types'
  * "Price this shop" (PROMPT-01 §8.2a / D10).
  *
  * Three steps — amount, date, location — then Save. A list with no category
- * gets a fourth step at the FRONT, once ever, and the answer is saved back
- * onto the list (§8.2d), so the normal case stays three.
+ * gets a step at the FRONT, once ever, and the answer is saved back onto the
+ * list (§8.2d), so the normal case stays three.
+ *
+ * 🚨 A ROUND-UP STEP IS APPENDED, and only when rounding would really apply
+ * (PROMPT-05): a Current Account shop, dated today, for a person whose
+ * round-ups are on and who has a Coin Jar, where the amount is not already a
+ * whole pound. Adam, 2026-09-21: "as soon as the location is picked … check
+ * if rounding is on, and apply it, and add the step to the picker flow to
+ * match transactions entries."
+ *
+ * When it does not apply it shows NOTHING — an always-present step that
+ * sometimes says "not rounding" is worse than no step at all. The step
+ * appearing and disappearing as the location or date changes IS the feature
+ * telling the truth: a joint shop, a pot shop and a BACKDATED shop do not
+ * round, deliberately.
  *
  * 🚨 Most of a transaction is NOT a decision anyone wants to make at the
  * till. `type` is always expense, `direction` always out, `payment_method`
@@ -61,12 +76,6 @@ export function FinishShopSheet({
 
   // Asked once, ever: only a list that has never had a category sees it.
   const needsCategory = shop.categoryId === ''
-  const steps = useMemo(
-    () => [...(needsCategory ? (['category'] as const) : []), 'amount', 'date', 'location'] as const,
-    [needsCategory],
-  )
-  const [stepIndex, setStepIndex] = useState(0)
-  const step = steps[stepIndex]
 
   const [categoryId, setCategoryId] = useState(
     () => shop.categoryId || defaultCategoryId(categories, householdId),
@@ -80,6 +89,16 @@ export function FinishShopSheet({
 
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // The person's answer on the round-up step. Pre-picked to round, the way
+  // the ledger's own wizard pre-picks it.
+  //
+  // 🚨 IT IS STORED, on `shop_completions.round_up_skipped`, and carried into
+  // the ledger row. The first build did not store it, reasoning that a
+  // completion is never recomputed — true, but the TRANSACTION it becomes is
+  // recomputed in the ledger on every save (APP-KNOWLEDGE §1.19d-2). UAT on
+  // 2026-09-22 found a declined £4.25 showing as "will round" there, one
+  // unrelated edit away from being booked at £5.00.
+  const [skipRounding, setSkipRounding] = useState(false)
 
   // Two decimals, and nothing a person could not have meant. A blank or
   // zero amount is not a priced shop, so Continue stays muted rather than
@@ -88,11 +107,43 @@ export function FinishShopSheet({
   const amount = Number.parseFloat(amountText.replace(/[^0-9.]/g, ''))
   const amountValid = Number.isFinite(amount) && amount > 0
 
+  // 🚨 THE OWNER OF THE PICKED LOCATION, never the signed-in user. In a
+  // two-person household Ella's Current Account shop rounds into ELLA's jar,
+  // gated on HER switch (§1.19d, PROMPT-05 trap 3). '' makes no call at all.
+  const roundUpOwnerId = location?.location === 'personal' ? location.ownerId : ''
+  const roundUpState = useRoundUpState(roundUpOwnerId, spendDate)
+  const rounds =
+    amountValid &&
+    roundUpApplies({ amount, location, spendDate, today: todayIso() }, roundUpState)
+  const roundedTo = amountValid ? roundUpTarget(amount) : 0
+  const uplift = amountValid ? roundUpUplift(amount) : 0
+  const jarOwner = location?.ownerName ?? ''
+
+  // Not memoised: it is four strings, and the round-up step's presence
+  // depends on the amount, the date, the location and the ledger's answer —
+  // a dependency list long enough to be wrong is worse than rebuilding an
+  // array of four strings on a render.
+  const steps = [
+    ...(needsCategory ? (['category'] as const) : []),
+    'amount',
+    'date',
+    'location',
+    ...(rounds ? (['round_up'] as const) : []),
+  ] as const
+  const [stepIndex, setStepIndex] = useState(0)
+  // The round-up step can vanish under an open sheet — picking a pot after
+  // picking a Current Account, say — so the index is clamped on read rather
+  // than trusted. Reading past the end would render a blank sheet with a
+  // dead Save button.
+  const step = steps[Math.min(stepIndex, steps.length - 1)]
+
   const canContinue =
     (step === 'category' && categoryId !== '') ||
     (step === 'amount' && amountValid) ||
     step === 'date' ||
-    (step === 'location' && location !== null)
+    (step === 'location' && location !== null) ||
+    step === 'round_up'
+  const isLastStep = step === steps[steps.length - 1]
 
   const next = () => {
     if (!canContinue) return
@@ -104,17 +155,30 @@ export function FinishShopSheet({
     if (!location || !amountValid || saving) return
     setSaving(true)
     setError(null)
+    // 🚨 ONE call decides the amount and the pair together, so a rounded
+    // shop can never be saved with a missing jar id (or the reverse) — that
+    // pair violates a CHECK, and a violated CHECK is a write PowerSync
+    // silently DISCARDS (§27). It is also where the pennies are settled:
+    // the ledger column is numeric and a 0.1+0.2 tail would be real money
+    // in a real account.
+    //
+    // What goes in `amount` is what the sheet just showed: £8.00 when it
+    // rounded, £7.50 when it did not.
+    const fields = shopRoundUpFields(
+      { amount, location, spendDate, today: todayIso(), skipped: skipRounding },
+      roundUpState,
+    )
     void saveShopCompletion({
       listId: shop.listId,
       listName: shop.listName,
       itemsSnapshot: shop.itemsSnapshot,
       categoryId,
-      // Rounded to pennies here rather than trusting whatever the keypad
-      // produced: the ledger column is numeric and a 0.1+0.2 tail would be
-      // real money in a real account.
-      amount: Math.round(amount * 100) / 100,
+      amount: fields.amount,
       spendDate,
       location,
+      roundedFrom: fields.roundedFrom,
+      roundingPotId: fields.roundingPotId,
+      roundUpSkipped: fields.roundUpSkipped,
     })
       .then((id) => onComplete(id))
       .catch((e: unknown) => {
@@ -226,6 +290,30 @@ export function FinishShopSheet({
         </>
       )}
 
+      {step === 'round_up' && (
+        <>
+          <div className="lbl">Round it up?</div>
+          <p className="help">
+            {jarOwner ? `${jarOwner} rounds` : 'You round'} Current Account spending up to the next
+            pound, and the difference goes to {jarOwner ? `${jarOwner}’s` : 'your'} Coin Jar.
+          </p>
+          <div className="chips">
+            <button aria-pressed={!skipRounding} onClick={() => setSkipRounding(false)}>
+              Round up to £{roundedTo.toFixed(2)}
+            </button>
+            <button aria-pressed={skipRounding} onClick={() => setSkipRounding(true)}>
+              Leave it at £{amount.toFixed(2)}
+            </button>
+          </div>
+          <p className="help">
+            {skipRounding
+              ? `£${amount.toFixed(2)} goes to your ledger, and nothing to the Coin Jar.`
+              : `£${roundedTo.toFixed(2)} goes to your ledger, remembering you spent £${amount.toFixed(2)}. ` +
+                `£${uplift.toFixed(2)} lands in the Coin Jar.`}
+          </p>
+        </>
+      )}
+
       {error && (
         <p className="help" style={{ color: 'var(--red)' }} role="alert">
           {error}
@@ -245,7 +333,7 @@ export function FinishShopSheet({
           </button>
         )}
         <div style={{ flex: 1 }} />
-        {step === 'location' ? (
+        {isLastStep ? (
           <button
             className={`btn brown${location && amountValid && !saving ? '' : ' waiting'}`}
             onClick={save}

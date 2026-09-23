@@ -853,3 +853,51 @@ nav button[aria-current=page] { background: var(--brown); color: #fff; }
   .confirm-card, .confirm-result, .confirm-root.leaving .confirm-card { animation-name: confirm-fade; }
   .confirm-mark .ring, .confirm-mark .stroke { stroke-dashoffset: 0; animation: none; }
 }
+
+/* ---------- reminders (RemindersSection.tsx) ---------- */
+/* 🚨 No email fallback: a device that cannot be reminded must LOOK like it.
+   `warn` is every state in which this device will not get a reminder. */
+.reminders { display: flex; flex-direction: column; gap: 10px; }
+.reminders > .help, .reminders > .lbl { margin: 0; }
+.reminder-state { padding: 12px 14px; font-size: 19px; line-height: 1.35; }
+.reminder-state.warn { border-color: var(--brown-2); background: var(--chip-bg); }
+.reminder-state.ok { border-color: var(--sage); background: var(--sage-wash); color: var(--ink); }
+.reminder-state .actions { margin-top: 10px; flex-wrap: wrap; row-gap: 8px; }
+/* Two buttons do not fit side by side in a phone-width card; the primary one
+   takes the full width and the other sits under it. */
+.reminder-state .actions .btn.sage { flex: 1 1 100%; }
+.device-list { list-style: none; margin: 4px 0 0; padding: 0; }
+.device-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 19px;
+}
+.device-list .sub { font-size: 16px; color: var(--muted); }
+
+/* ---------- the Sync check panel (SyncDiagnostics.tsx) ---------- */
+/* 🚨 Nothing in here may widen the sheet: a long host, token or error must
+   wrap, never scroll sideways (Adam, 2026-09-21). min-width: 0 on the flex
+   children is what lets them shrink below their content's width at all. */
+.diag { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.diag .grow { min-width: 0; }
+.diag .nm, .diag .st, .diag .help { overflow-wrap: anywhere; }
+.diag .nm { font-size: 21px; }
+.diag-verdict { padding: 14px; }
+.diag-verdict .lbl { margin: 0 0 4px; }
+.diag-verdict .help { margin: 0; }
+.diag-details { display: flex; flex-direction: column; gap: 6px; }
+.diag-details > summary {
+  cursor: pointer;
+  font-size: 20px;
+  color: var(--brown);
+  padding: 6px 0;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+.diag-details .lbl { margin-top: 10px; }
+.diag-dot { width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; margin-right: 4px; }
+.sheet { overflow-x: hidden; }

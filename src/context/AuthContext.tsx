@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabaseClient'
 import { clearHouseholdCache } from '../lib/powersync/household'
+import { forgetThisDevice } from '../lib/push'
 
 /**
  * Auth, ported in shape from shared-finance-ledger's AuthContext (itself
@@ -152,6 +153,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const signOut = async () => {
+    // 🚨 BEFORE signing out: the delete needs this session to pass RLS.
+    // Adam, 2026-09-21 — a phone that has been signed out of must stop
+    // getting that account's reminders, or the next person to sign in on it
+    // is sent them. Best effort; it never blocks the sign-out.
+    await forgetThisDevice()
     const { error } = await supabase.auth.signOut()
     if (error) console.warn('[auth] sign-out failed:', error.message)
     clearHouseholdCache()

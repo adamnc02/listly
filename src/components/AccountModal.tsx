@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { Sheet } from './Sheet'
+import { RemindersSection } from './RemindersSection'
+import { SyncNowSection } from './SyncNowSection'
+import { powerSyncDb } from '../lib/powersync/database'
 import { useAuth } from '../context/AuthContext'
 import { getLinkCode, regenerateLinkCode, redeemLinkCode, eraseMyData } from '../lib/powersync/linking'
 
@@ -33,7 +36,21 @@ export function AccountModal({ onClose }: { onClose: () => void }) {
   const [busy, setBusy] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [confirm, setConfirm] = useState<'regenerate' | 'redeem' | 'erase' | null>(null)
+  const [confirm, setConfirm] = useState<'regenerate' | 'redeem' | 'erase' | 'signout' | null>(null)
+  const [unsent, setUnsent] = useState(0)
+
+  // 🚨 Signing out keeps this phone's data for THIS account — but if a
+  // different account signs in here next, SyncRoot clears the device, and
+  // anything not yet uploaded goes with it. So say so first (2026-09-21).
+  const trySignOut = async () => {
+    const n = (await powerSyncDb.getUploadQueueStats().catch(() => ({ count: 0 }))).count
+    if (n > 0) {
+      setUnsent(n)
+      setConfirm('signout')
+      return
+    }
+    void signOut()
+  }
 
   // Guarded against React StrictMode's double-invoke: two concurrent calls
   // to create_household_link_code() race each other on its unique constraint.
@@ -154,8 +171,14 @@ export function AccountModal({ onClose }: { onClose: () => void }) {
       {note && <p className="help" style={{ color: 'var(--sage)' }}>{note}</p>}
       {error && <p className="help" style={{ color: 'var(--red)' }} role="alert">{error}</p>}
 
+      {/* Phase 5. Its own component: it has its own states, its own errors,
+          and nothing to do with the household above. */}
+      <RemindersSection />
+
+      <SyncNowSection />
+
       <div className="actions">
-        <button className="btn ghost" onClick={() => void signOut()}>Sign out</button>
+        <button className="btn ghost" onClick={() => void trySignOut()}>Sign out</button>
         <div style={{ flex: 1 }} />
         <button className="btn danger" onClick={() => setConfirm('erase')} disabled={busy !== null}>
           Delete my app data
@@ -168,12 +191,15 @@ export function AccountModal({ onClose }: { onClose: () => void }) {
             {confirm === 'regenerate' && 'Make a new code?'}
             {confirm === 'redeem' && 'Join this household?'}
             {confirm === 'erase' && 'Delete your Listly data?'}
+            {confirm === 'signout' && `${unsent} change${unsent === 1 ? '' : 's'} not sent yet`}
           </div>
           <p className="help" style={{ marginTop: 0 }}>
             {confirm === 'regenerate' &&
               'The current code stops working straight away, in Listly and in Shared Ledger. Anyone already in your household stays in it.'}
             {confirm === 'redeem' &&
               'If nobody else is left in your current household, your shopping lists and house jobs come with you. If someone else is still in it, they stay behind — they are shared. My jobs always comes with you.'}
+            {confirm === 'signout' &&
+              `They're saved on this phone and send when you sign back in as ${session?.user?.email ?? 'this account'}. If a different account signs in on this phone first, they're lost. Sync now first to send them.`}
             {confirm === 'erase' &&
               'This deletes your Listly data: your private My jobs always, and — if nobody else is in your household — its shopping lists, items, house jobs and shop history too. It also deletes your Shared Ledger data the same way. Your login is kept.'}
           </p>
@@ -186,6 +212,11 @@ export function AccountModal({ onClose }: { onClose: () => void }) {
               </button>
             )}
             {confirm === 'redeem' && <button className="btn sage" onClick={() => void doRedeem()}>Join</button>}
+            {confirm === 'signout' && (
+              <button className="btn danger" onClick={() => void signOut()}>
+                Sign out anyway
+              </button>
+            )}
             {confirm === 'erase' && (
               <button
                 className="btn danger"
