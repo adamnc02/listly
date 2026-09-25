@@ -51,6 +51,8 @@ export interface ShopSnapshot {
   listId: string
   listName: string
   itemsSnapshot: string
+  /** Unticked items, newline-joined: "except for…" in the partner's push. */
+  itemsLeft: string
   /** '' → the sheet inserts a category step at the front, once. */
   categoryId: string
 }
@@ -82,7 +84,9 @@ interface ListlyValue {
    * price it". NOT when the price sheet is cancelled. See the note on
    * snapshotShop's caller.
    */
-  finishShop: (listId: string) => Promise<void>
+  /** The shop really is over: record it (unless a priced completion was
+   *  already saved — pass its id) and clear the ticked items. */
+  finishShop: (listId: string, savedCompletionId?: string | null) => Promise<void>
 
   // ── the ledger bridge (Phase 4) ──────────────────────────────────────────
   /**
@@ -321,20 +325,33 @@ export function ListlyProvider({ children }: { children: ReactNode }) {
     async (listId: string): Promise<ShopSnapshot> => {
       const list = lists.find((l) => l.id === listId)
       const ticked = await writes.tickedItemNames(listId)
+      const left = await writes.tickedItemNames(listId, false)
       return {
         listId,
         listName: list?.name ?? '',
         itemsSnapshot: ticked.join('\n'),
+        itemsLeft: left.join('\n'),
         categoryId: list?.categoryId ?? '',
       }
     },
     [lists],
   )
 
-  const finishShop = useCallback(async (listId: string): Promise<void> => {
-    await writes.clearDoneItems(listId)
-    setDevice((d) => withListOpen(d, listId, false))
-  }, [])
+  const finishShop = useCallback(
+    async (listId: string, savedCompletionId: string | null = null): Promise<void> => {
+      // 🚨 EVERY finished shop is recorded (Adam, 2026-09-25), so the other
+      // person is told "Tesco complete" whether or not it was priced. A Save
+      // already wrote its row; anything else writes an UNPRICED one here,
+      // BEFORE the ticked items are deleted, because they are its snapshot.
+      if (!savedCompletionId) {
+        const shop = await snapshotShop(listId)
+        await writes.insertUnpricedCompletion(householdId, shop)
+      }
+      await writes.clearDoneItems(listId)
+      setDevice((d) => withListOpen(d, listId, false))
+    },
+    [householdId, snapshotShop],
+  )
 
   const setListCategory = useCallback((listId: string, categoryId: string) => {
     run(writes.setListCategory(listId, categoryId))

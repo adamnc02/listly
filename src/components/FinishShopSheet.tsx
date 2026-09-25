@@ -172,6 +172,7 @@ export function FinishShopSheet({
       listId: shop.listId,
       listName: shop.listName,
       itemsSnapshot: shop.itemsSnapshot,
+      itemsLeft: shop.itemsLeft,
       categoryId,
       amount: fields.amount,
       spendDate,

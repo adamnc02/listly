@@ -35,6 +35,7 @@ that must not be quietly undone. Start there; this is the map of everything else
 20. [Icons and the icon master](#20-icons-and-the-icon-master)
 21. [Build, deploy and environment](#21-build-deploy-and-environment)
 22. [Module: Reminders (push only)](#22-module-reminders-push-only)
+23. [Module: Shopping notifications](#23-module-shopping-notifications)
 
 ---
 
@@ -982,9 +983,22 @@ Reminders.
 > 🚨 **Overdue jobs are now reminded.** Until 2026-09-25 reminders stopped on the due day and the
 > banners (§13) covered overdue jobs. Adam: "Keep nagging until done."
 
-A House job reminds **both** household members; a To-Do job only its owner. A notification opens
-Listly on that job's tab (`?tab=house|mine`; an already-open window is reused via a `listly:open`
-message, because a second window would fight the first for PowerSync's database).
+A House job reminds **both** household members; a To-Do job only its owner.
+
+**Tapping a notification opens Listly on that job's tab and flashes the job's row** (Adam, UAT
+2026-09-25: taps were landing on Shopping). `lib/openIntent.ts` and `public/sw.js`:
+
+- The URL says `?tab=house|mine|shopping`, and the worker adds `&job=<id>` for a job reminder,
+  taken from the notification's **tag**, which is its `reminder_log` key (`<table>:<job_id>:…`).
+- 🚨 **The destination is delivered three ways**, because on an iPhone any one can be lost: the
+  URL (lost when iOS cold-starts the app at `start_url`), a `listly:open` message to an open
+  window (missed by a suspended page), and **a note in Cache Storage** that the app reads and
+  deletes on start and whenever it comes to the front. The note is a notepad, not a page cache:
+  there is still **no fetch handler** (`verify-open-intent.ts` asserts it).
+- The row pulses three times (`.row.flash`); reduced motion gets a steady highlight. A done or
+  deleted job is simply not found. Shopping notifications open Shopping and flash nothing.
+- An already-open window is reused, because a second one would fight the first for PowerSync's
+  database.
 
 > 🚨 **There is no email fallback.** Dismissed 2026-09-21: no domain, no paid plan, and a free
 > provider without a verified domain delivers only to the account owner, so Ella could never have
@@ -1051,3 +1065,62 @@ tables, so any role but the job's owner sees none of them. The first scheduled r
 
 **Both phones are set up** (confirmed 2026-09-23): Ella has Listly on her Home Screen with
 permission granted, which is her only route to a reminder.
+
+---
+
+## 23. Module: Shopping notifications
+
+`components/ShoppingPushToggle.tsx`, `lib/pushPrefs.ts`, the finish-shop paths in
+`context/ListlyContext.tsx`, and in `silver-octo-invention` migration `20260925180000` plus the
+same `listly-reminders` Edge Function as §22 — `docs/listly-SUPABASE.md` → *Shopping
+notifications*. Adam's decisions, 2026-09-25:
+
+| Push | When | Words |
+|---|---|---|
+| **New stuff to buy** | 5 minutes after the **first** item one person adds to one list | *"Ella added milk, eggs, bread and 2 more things to the Tesco shopping list."* — what she added in those 5 minutes that is **still on the list**, by its **current** name. Three names, then a count |
+| **Tesco complete** | every finished shop, priced or not | *"Adam bought everything on the list[ except for A, B and N more items][, and logged this on the joint account]."* |
+
+- **Finishing the shop cancels your own pending "added" push** (Adam, UAT 2026-09-25;
+  `20260925200000`): add a few things, finish the shop inside five minutes, and only "<List>
+  complete" is sent. Only the **same** person's finish cancels — if Ella finishes while Adam is
+  still adding at home, she still hears what he added. Items added after the finish are a new
+  batch.
+- **Never the person who did it**, never anyone who turned the switch off, nothing older than an
+  hour. Names come from the ledger's "Set as me"; anyone unlinked is "Someone".
+- 🚨 **No amount, ever** ("just state 'Adam logged this on the joint account'"). The joint clause
+  appears only when the ledger **really booked** it on the joint account — not on a Current
+  Account or pot shop, and not on a joint shop the ledger refused.
+- **All the words are built in SQL** (`claim_shopping_pushes()`), so the behaviour tests assert
+  the exact sentence a phone shows. Change them there.
+
+### Every finished shop is recorded now
+
+Until 2026-09-25 only a **priced** shop wrote a `shop_completions` row. Now `finishShop(listId,
+savedCompletionId)` writes an **unpriced** one (no amount) whenever there is no saved one — a
+household with no ledger, or "Don't price it" — **before** the ticked items are deleted, because
+they are its snapshot. It also records `items_left`, the unticked items, for "except for…".
+
+> 🚨 This is safe for the ledger only because `write_ledger_transaction()` returns before doing
+> anything when `amount` is null. An unpriced row books nothing and records no `ledger_error`, so
+> it never appears in the Retry banner (§14). `behaviour-listly-shopping-pushes.mjs` asserts both.
+
+### The switch
+
+One per **person**, on the Shopping page, saved on the server (`listly.push_prefs`) so it applies
+to every one of their phones. **Read and written over REST, not synced** (like
+`push_subscriptions`), so it needed no Sync Stream change; the last answer is cached per device
+only so it shows offline. No row means **on**. The line under it says when **this** device cannot
+receive notifications at all — a switch reading "on" on a phone that will never be told would be
+the lie §22 exists to prevent. Hidden in a household of one.
+
+"Delete my app data" does **not** clear it (Adam, 2026-09-25: "Fine to leave it"), for the same
+reason the ledger leaves its notification tables: a preference is not app data, and not editing
+`erase_my_data()` removes the one way this change could destroy the Listly block inside it.
+
+### `shopping_items.created_at`
+
+Stamped by the **server** default, never sent by the app (the column is not in `tables.ts`). It
+was added **without** back-filling: every item that existed before `20260925180000` is NULL and is
+never announced — otherwise the whole household's lists would have been pushed as "new" five
+minutes after the migration.
+

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { JobPage } from '../types'
 import { useListly } from '../context/ListlyContext'
 import { dueLabel, isDueSoon, sortOpenJobs } from '../lib/jobs'
@@ -29,7 +29,9 @@ const TITLE: Record<JobPage, string> = { house: 'House jobs', mine: 'To-Do' }
  * same sheet a tap on a job does, because a job now has a repeat and an
  * alert to set as well as a name and a date (PROMPT-01 §A4).
  */
-export function JobsPage({ page }: { page: JobPage }) {
+export function JobsPage({
+  page, flashJobId = null, flashKey = 0,
+}: { page: JobPage; flashJobId?: string | null; flashKey?: number }) {
   const { jobsFor, device, toggleJob, toggleRemind, setDoneOpen } = useListly()
   // null = closed, 'new' = creating, otherwise the id being edited.
   const [sheet, setSheet] = useState<string | null>(null)
@@ -38,6 +40,14 @@ export function JobsPage({ page }: { page: JobPage }) {
   const open = sortOpenJobs(all.filter((j) => !j.done))
   const done = all.filter((j) => j.done)
   const doneOpen = device.doneOpen[page]
+
+  // A tapped reminder names its job (src/lib/openIntent.ts): bring the row
+  // into view. The flash itself is CSS on the row. A job that is done,
+  // deleted, or on the other page is simply not found, and nothing happens.
+  const flashRow = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    flashRow.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }, [flashJobId, flashKey])
 
   return (
     <div className="stack">
@@ -51,7 +61,13 @@ export function JobsPage({ page }: { page: JobPage }) {
 
       <div className="card jobs">
         {open.map((job) => (
-          <div className="row" style={{ minHeight: 52 }} key={job.id}>
+          <div
+            className={`row${job.id === flashJobId ? ' flash' : ''}`}
+            style={{ minHeight: 52 }}
+            // A new key per tap restarts the animation on a second tap.
+            key={job.id === flashJobId ? `${job.id}:${flashKey}` : job.id}
+            ref={job.id === flashJobId ? flashRow : undefined}
+          >
             <button
               className="tick"
               onClick={() => toggleJob(job.id)}

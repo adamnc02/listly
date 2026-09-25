@@ -100,6 +100,8 @@ export const SYNCED_TABLES: SyncedTable[] = [
     list_id: 'text', list_name: 'text', completed_at: 'text',
     amount: 'real', spend_date: 'text', category_id: 'text', payment_method: 'text',
     location: 'text', owner_id: 'text', pot_id: 'text',
+    // 20260925180000: the items left UNticked, for the partner's push.
+    items_left: 'text',
     // What was bought, kept in LISTLY ONLY. Adam, 2026-09-20: "only amount
     // needs to be recorded to shared-ledger-finance, but would be handy to
     // have that information in listly's tables". The ledger-bridge trigger

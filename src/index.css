@@ -517,6 +517,17 @@ input[type=date], input[type=time] {
 /* The row's small text: the repeat, and an alert that is not the default
    (PROMPT-01 §A5). Chip-sized, muted, and never louder than the due chip. */
 .jobmeta { font-size: 18px; line-height: 1.15; color: var(--muted); }
+/* The job whose reminder was just tapped (Adam, UAT 2026-09-25). Three soft
+   pulses of --sage-wash with a --sage ring, then gone. Reduced motion gets a
+   steady highlight for the same 3s instead of movement. */
+@keyframes listly-flash {
+  0%, 100% { background: transparent; box-shadow: inset 0 0 0 0 transparent; }
+  35%, 65% { background: var(--sage-wash); box-shadow: inset 0 0 0 2px var(--sage); }
+}
+.row.flash { border-radius: 12px; animation: listly-flash .9s ease-in-out 3; }
+@media (prefers-reduced-motion: reduce) {
+  .row.flash { animation: none; background: var(--sage-wash); box-shadow: inset 0 0 0 2px var(--sage); }
+}
 .chip { font-size: 18px; padding: 1px 10px; border-radius: 999px; background: var(--chip-bg); color: var(--brown-2); }
 .chip.soon { background: var(--chip-soon-bg); color: var(--chip-soon-ink); }
 .bell { color: var(--bell-off); }
@@ -730,6 +741,10 @@ nav button[aria-current=page] { background: var(--brown); color: #fff; }
   padding: 0 12px;
 }
 .actions { display: flex; align-items: center; gap: 10px; padding-top: 4px; }
+/* The Shopping page's "Notify me about shopping" card (TECHNICAL.md §23). */
+.shop-notify { padding: 8px 14px 12px; display: flex; flex-direction: column; gap: 4px; }
+.shop-notify .help { margin: 0; font-size: 19px; line-height: 1.2; color: var(--muted); }
+.shop-notify .help.warn { color: var(--brown-2); }
 
 /* ---------- the job sheet (PROMPT-01 §A4) ---------- */
 /* One label + control(s) per line. Native <select> and time inputs on
