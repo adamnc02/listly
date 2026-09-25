@@ -983,9 +983,22 @@ Reminders.
 > 🚨 **Overdue jobs are now reminded.** Until 2026-09-25 reminders stopped on the due day and the
 > banners (§13) covered overdue jobs. Adam: "Keep nagging until done."
 
-A House job reminds **both** household members; a To-Do job only its owner. A notification opens
-Listly on that job's tab (`?tab=house|mine`; an already-open window is reused via a `listly:open`
-message, because a second window would fight the first for PowerSync's database).
+A House job reminds **both** household members; a To-Do job only its owner.
+
+**Tapping a notification opens Listly on that job's tab and flashes the job's row** (Adam, UAT
+2026-09-25: taps were landing on Shopping). `lib/openIntent.ts` and `public/sw.js`:
+
+- The URL says `?tab=house|mine|shopping`, and the worker adds `&job=<id>` for a job reminder,
+  taken from the notification's **tag**, which is its `reminder_log` key (`<table>:<job_id>:…`).
+- 🚨 **The destination is delivered three ways**, because on an iPhone any one can be lost: the
+  URL (lost when iOS cold-starts the app at `start_url`), a `listly:open` message to an open
+  window (missed by a suspended page), and **a note in Cache Storage** that the app reads and
+  deletes on start and whenever it comes to the front. The note is a notepad, not a page cache:
+  there is still **no fetch handler** (`verify-open-intent.ts` asserts it).
+- The row pulses three times (`.row.flash`); reduced motion gets a steady highlight. A done or
+  deleted job is simply not found. Shopping notifications open Shopping and flash nothing.
+- An already-open window is reused, because a second one would fight the first for PowerSync's
+  database.
 
 > 🚨 **There is no email fallback.** Dismissed 2026-09-21: no domain, no paid plan, and a free
 > provider without a verified domain delivers only to the account owner, so Ella could never have

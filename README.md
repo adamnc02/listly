@@ -159,7 +159,8 @@ device either** — that would lose unsent changes for the common case of signin
 
 ### The service worker has no `fetch` handler.
 
-`public/sw.js` exists for push notifications only. A service worker that caches is how a PWA gets
+`public/sw.js` exists for push notifications only. It writes one small note to Cache Storage when
+a notification is tapped (where to open — `TECHNICAL.md` §22), and reads nothing back itself. A service worker that caches is how a PWA gets
 stuck on an old build permanently — every deploy silently fails to reach the phone. Listly is
 offline-first through PowerSync's local database, not through a cache, so it needs none. **Adding
 a `fetch` handler needs a versioning and update plan first**, tested against upgrading from the

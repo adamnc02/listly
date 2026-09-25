@@ -12,7 +12,9 @@ import { Me } from './components/Icons'
 import { SyncStatusDot } from './components/SyncStatusDot'
 import icon from '/apple-touch-icon.png'
 
-export type Tab = 'shopping' | 'house' | 'mine'
+export type { Tab } from './lib/openIntent'
+import type { Tab } from './lib/openIntent'
+import { parseOpen, takePendingOpen } from './lib/openIntent'
 
 /**
  * The app shell: header, due-soon banners, the current tab, the tab bar.
@@ -26,27 +28,55 @@ export type Tab = 'shopping' | 'house' | 'mine'
  * prototype's bulk and it would be carried into every build for no reason
  * (PROMPT-01 §11).
  */
-/** A reminder's notification opens Listly on that job's tab: `?tab=house`. */
-function tabFrom(url: string): Tab | null {
-  const t = new URL(url, window.location.href).searchParams.get('tab')
-  return t === 'house' || t === 'mine' || t === 'shopping' ? t : null
-}
-
 function Shell() {
-  const [tab, setTab] = useState<Tab>(() => tabFrom(window.location.href) ?? 'shopping')
+  const initial = parseOpen(window.location.href, window.location.href)
+  const [tab, setTab] = useState<Tab>(() => initial.tab ?? 'shopping')
+  // The job whose reminder was tapped, flashed once on its page. `n` makes a
+  // second tap on the same job flash again rather than be ignored.
+  const [flash, setFlash] = useState<{ id: string; n: number } | null>(() =>
+    initial.jobId ? { id: initial.jobId, n: 1 } : null,
+  )
 
-  // Tapping a notification while Listly is already open reuses that window
-  // (public/sw.js), and says which tab to show.
+  // Where a tapped notification wants to land (src/lib/openIntent.ts). Three
+  // ways it can arrive — the URL, the worker's message, the worker's note —
+  // because on an iPhone any one of them can be lost.
   useEffect(() => {
-    if (!('serviceWorker' in navigator)) return
+    const apply = (url: string) => {
+      const o = parseOpen(url, window.location.href)
+      if (o.tab) setTab(o.tab)
+      if (o.jobId) setFlash((f) => ({ id: o.jobId!, n: (f?.n ?? 0) + 1 }))
+    }
+    const fromNote = () => {
+      void takePendingOpen().then((url) => url && apply(url))
+    }
+    // A reload must not re-flash, so the query goes once it has been read.
+    if (initial.tab || initial.jobId) {
+      window.history.replaceState(null, '', window.location.pathname)
+    }
+    fromNote()
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') fromNote()
+    }
+    document.addEventListener('visibilitychange', onVisible)
     const onMessage = (e: MessageEvent) => {
       if (e.data?.type !== 'listly:open' || typeof e.data.url !== 'string') return
-      const t = tabFrom(e.data.url)
-      if (t) setTab(t)
+      apply(e.data.url)
+      fromNote() // the note says the same thing; delete it so it is not applied twice
     }
-    navigator.serviceWorker.addEventListener('message', onMessage)
-    return () => navigator.serviceWorker.removeEventListener('message', onMessage)
+    navigator.serviceWorker?.addEventListener('message', onMessage)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible)
+      navigator.serviceWorker?.removeEventListener('message', onMessage)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // The flash is a moment, not a state: gone after it has played.
+  useEffect(() => {
+    if (!flash) return
+    const t = window.setTimeout(() => setFlash(null), 3200)
+    return () => window.clearTimeout(t)
+  }, [flash])
   const [accountOpen, setAccountOpen] = useState(false)
 
   // A household of ONE has no House jobs tab (PROMPT-01 Q11). Exactly one:
@@ -85,8 +115,8 @@ function Shell() {
       <div className="main-wrap">
         <main>
           {shown === 'shopping' && <Shopping />}
-          {shown === 'house' && <JobsPage page="house" />}
-          {shown === 'mine' && <JobsPage page="mine" />}
+          {shown === 'house' && <JobsPage page="house" flashJobId={flash?.id ?? null} flashKey={flash?.n ?? 0} />}
+          {shown === 'mine' && <JobsPage page="mine" flashJobId={flash?.id ?? null} flashKey={flash?.n ?? 0} />}
         </main>
         <div className="edge-fade edge-fade-top" aria-hidden="true" />
         <div className="edge-fade edge-fade-bottom" aria-hidden="true" />

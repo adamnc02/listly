@@ -41,24 +41,55 @@ self.addEventListener('push', (event) => {
   )
 })
 
-// Tapping the notification opens Listly on the right tab. An open Listly
-// window is reused rather than a second one opened — a second window would
-// fight the first for PowerSync's on-device database, which on iOS only one
-// can hold.
+// Tapping the notification opens Listly on the right tab — and, for a job
+// reminder, on the right JOB, which the page flashes (src/lib/openIntent.ts).
+// An open Listly window is reused rather than a second one opened — a second
+// window would fight the first for PowerSync's on-device database, which on
+// iOS only one can hold.
+//
+// 🚨 THE DESTINATION IS ALSO WRITTEN DOWN (Adam, UAT 2026-09-25: taps landed
+// on Shopping). On an iPhone, a cold start can open the app at start_url and
+// drop `?tab=`, and a suspended page can miss the postMessage below. The page
+// reads this note whenever it starts or comes to the front, and deletes it.
+// Cache Storage used as a notepad — this worker still has NO fetch handler.
+const OPEN_INTENT_CACHE = 'listly-open-intent'
+const OPEN_INTENT_PATH = '__open-intent'
+
+// A copy of jobIdFromTag() in src/lib/openIntent.ts (this file cannot import);
+// scripts/verify-open-intent.ts proves the two agree. A job reminder's tag is
+// its reminder_log key: '<house_jobs|my_jobs>:<job_id>:…'.
+const JOB_TAG = /^(?:house_jobs|my_jobs):([^:]+):/
+
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
   const target = new URL(event.notification.data?.url || self.registration.scope, self.registration.scope)
   // Only ever somewhere inside Listly.
-  const url = target.href.startsWith(self.registration.scope) ? target.href : self.registration.scope
+  const inside = target.href.startsWith(self.registration.scope) ? target : new URL(self.registration.scope)
+  const job = JOB_TAG.exec(event.notification.tag || '')
+  if (job && !inside.searchParams.has('job')) inside.searchParams.set('job', job[1])
+  const url = inside.href
+
+  const note = caches
+    .open(OPEN_INTENT_CACHE)
+    .then((c) =>
+      c.put(
+        new URL(OPEN_INTENT_PATH, self.registration.scope).href,
+        new Response(JSON.stringify({ url, at: Date.now() }), { headers: { 'Content-Type': 'application/json' } }),
+      ),
+    )
+    .catch(() => {})
+
   event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windows) => {
-      for (const w of windows) {
-        if (w.url.startsWith(self.registration.scope)) {
-          w.postMessage({ type: 'listly:open', url })
-          return w.focus()
+    note
+      .then(() => self.clients.matchAll({ type: 'window', includeUncontrolled: true }))
+      .then((windows) => {
+        for (const w of windows) {
+          if (w.url.startsWith(self.registration.scope)) {
+            w.postMessage({ type: 'listly:open', url })
+            return w.focus()
+          }
         }
-      }
-      return self.clients.openWindow(url)
-    }),
+        return self.clients.openWindow(url)
+      }),
   )
 })
