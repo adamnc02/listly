@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { label12, to12, to24, type Time12 } from '../lib/time12'
+import { to12, to24, type Time12 } from '../lib/time12'
 
 /**
  * The 12-hour time picker (Adam, 2026-09-25): AM/PM at the top, then an hour
@@ -152,8 +152,11 @@ export function TimeWheel({
         <Drum label="Min" values={MINUTES} index={t.minute} pad onChange={(i) => setT({ ...t, minute: MINUTES[i] })} />
       </div>
 
+      {/* Only the 24-hour figure (Adam, 2026-09-25): the drums already show
+          the 12-hour time, and this is where Ella learns what it is on the
+          24-hour clock — the form the field and the job's chip will show. */}
       <p className="help drum-readout">
-        {label12(t)} · {to24(t)}
+        That’s <b>{to24(t)}</b> on the 24-hour clock
       </p>
 
       <div className="actions">

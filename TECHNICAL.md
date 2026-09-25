@@ -617,8 +617,8 @@ Each / On the… month grid, or the month grid + Days of week, with the live sen
 - **Hour and minute alerts are only offered once there is a time** (Q8).
 - **Both time fields have a clock button** (Adam, 2026-09-25: Ella reads the 12-hour clock, Adam
   prefers 24). It opens `TimeWheel` as a step of the same sheet — AM/PM at the top, an hour drum
-  (1–12) and a minute drum (00–59) — and **Set writes the 24-hour value into the field**, the only
-  form stored. The drum is BLOC's rest-timer picker (`bloc-app` `buildPicker()`), ported, plus a
+  (1–12) and a minute drum (00–59), with *"That's 16:50 on the 24-hour clock"* under them — and
+  **Set writes the 24-hour value into the field**, the only form stored. The drum is BLOC's rest-timer picker (`bloc-app` `buildPicker()`), ported, plus a
   mouse wheel, arrow keys and tap-a-row. 🚨 12 AM is 00:xx and 12 PM is 12:xx:
   `scripts/verify-time12.ts` round-trips every minute of the day. On an iPhone the native time
   field opens iOS's own wheel, never a keyboard, so there is no keyboard type to set.
