@@ -24,7 +24,7 @@ that must not be quietly undone. Start there; this is the map of everything else
 9. [Module: Finish shop](#9-module-finish-shop)
 10. [Module: Manage lists](#10-module-manage-lists)
 11. [Module: Item edit](#11-module-item-edit)
-12. [Module: House jobs and My jobs](#12-module-house-jobs-and-my-jobs)
+12. [Module: House jobs and To-Do](#12-module-house-jobs-and-to-do)
 13. [Module: Due-soon banners](#13-module-due-soon-banners)
 14. [Module: Ledger errors](#14-module-ledger-errors)
 15. [Module: Account and household](#15-module-account-and-household)
@@ -226,7 +226,8 @@ layer is a rename rather than a redesign.
 | `IsoDate` | `'YYYY-MM-DD'`. `''` means "no due date", matching the `'' ↔ NULL` rule the sync layer applies |
 | `Item` | `id`, `text`, `done` |
 | `List` | plus `isDefault`, `createdAt`, `neverHadItems`, `categoryId` |
-| `Job` | `page` (`'house' \| 'mine'`), `text`, `due`, `remind`, `done` |
+| `Job` | `page` (`'house' \| 'mine'`), `text`, `due`, `remind`, `done`, plus `dueTime`, `repeat`, `alertOffset`, `alertTime` (§12) |
+| `JobDraft` | What the job sheet saves in one go; written only through `jobColumns()` (§12) |
 | `DeviceState` | `openLists`, `dismissedBanners`, `doneOpen` — never synced (§6) |
 | `LedgerCategory` | Read through the `lst_ref_categories` mirror. Listly reads these and writes them never |
 | `LocationOption` | One entry in the Finish-shop location picker |
@@ -568,10 +569,10 @@ stable for two devices to converge.
 
 ---
 
-## 12. Module: House jobs and My jobs
+## 12. Module: House jobs and To-Do
 
-`pages/JobsPage.tsx`. **The two pages are identical in behaviour; each has its own jobs** — so they
-are **one component parameterised by `page`**.
+`pages/JobsPage.tsx` and `components/JobSheet.tsx`. **The two pages are identical in behaviour;
+each has its own jobs**, so they are **one component parameterised by `page`**.
 
 That mirrors the backend deliberately. `house_jobs` and `my_jobs` are **two tables** rather than
 one table with a `page` column, because the RLS predicate and the Sync Stream predicate genuinely
@@ -579,25 +580,77 @@ differ (household vs user) — `my_jobs` has no `household_id` at all, and that 
 independently by the column default, the RLS policy and the stream predicate. **Two tables, one
 component, on purpose.**
 
-The page is: a heading with "N to do", an add form (name + optional due date), the open jobs sorted
-by `sortOpenJobs`, and a collapsible Done section whose open/closed state is per device.
+> 🚨 **"To-Do" is a name, not a rename** (Adam, 2026-09-25). The page was "My jobs"; the table is
+> still `my_jobs` and the page id still `'mine'`, so `?tab=mine` from a notification keeps
+> opening it. Renaming a published table is what MIGRATION-LESSONS §19 forbids.
 
-**The bell is a real reminder now** (Phase 5, §22): with it on, the job is pushed at **08:00 every
-morning from three days before it is due until it is ticked done**. On a House job it reminds
-**both** household members — `remind` is one switch on the job, with no record of who set it; on a
-My job, only its owner.
+The page is: a heading with "N to do" and a **+**, the open jobs sorted by `sortOpenJobs`, and a
+collapsible Done section whose open/closed state is per device. **There is no inline add form**:
+the + opens the same sheet a tap on a job does, because a job has a repeat and an alert to set as
+well as a name and a date.
 
-`components/JobEditSheet.tsx` edits text, due date and reminder. **The reminder checkbox appears
-only when a due date is set, and clearing the date turns the reminder off** — and clearing a due
-date clears `remind` in the **same SQL statement**, or the row momentarily violates its CHECK
-constraint and the write is discarded silently.
+**House jobs is hidden when the household has exactly one member** (Adam, 2026-09-25), read from
+the synced `lst_ref_household_members` mirror, and its banners (§13) with it. Exactly one: zero
+rows means the mirror has not synced yet, which is "unknown", and hiding the tab on every cold
+start would make it flicker. Nothing else is guarded ("No single person users on the app right
+now").
 
----
+### The row
+
+The due chip gains the time when there is one (`dueLabel(due, time)`: "Due today · 18:00"). Under
+it, small text: the repeat whenever there is one (`shortRule`: "Every 2 weeks · Mon, Thu"), and
+the alert **only when it is not the default** (`alertSummary`: "Alert 2 days before, 09:00").
+
+**The bell stays**, shown only with a due date, and switches this job's alerts off and on. The
+alert settings are kept while it is off. On a House job, `remind` is one switch for both people,
+with no record of who set it.
+
+### The sheet — create and edit
+
+`JobSheet` has two steps: the job (name · date · optional time · Repeat · Remind me · Alert), and
+iOS Calendar's **Custom** repeat screen (Frequency, Every N, then the weekday grid, the
+Each / On the… month grid, or the month grid + Days of week, with the live sentence). Native
+`<select>` and time inputs on purpose: on an iPhone they open the system wheel.
+
+- **Entering a due date turns the bell on** (Q10). Clearing it turns the bell off and clears the
+  time, the repeat and any timed alert.
+- **Hour and minute alerts are only offered once there is a time** (Q8).
+- Save is `.waiting` until there is a name, and says so if tapped (§19).
+
+> 🚨 **Every job row is built by `jobColumns()` in `lib/jobs.ts`, and nothing else.** Each rule in
+> it is a CHECK the database would otherwise refuse (a timed alert needs a time, a reminder needs
+> a date, formats), and **a refused upload is discarded silently** (§27): the job would look saved
+> on this phone and exist nowhere else. `scripts/verify-job-alerts.ts` holds it to the server's
+> rules, including the exact `alert_offset` pattern.
+
+### Recurring jobs (`lib/recurrence.ts`, `scripts/verify-recurrence.ts`)
+
+The full iOS model, stored as a plain string in `repeat_rule` (there is no `jsonb` in this
+schema): `D;N`, `W;N;BYDAY=MO,TH`, `M;N;BYMD=1,15`, `M;N;POS=-1;KIND=WD`, `Y;N;BYMON=9;BYMD=24`,
+`Y;N;BYMON=9;POS=1;KIND=SU`. **The server never reads it.** The phone moves the due date, and
+the reminder job only ever sees the date that results.
+
+- **Ticking a recurring job moves the same row on to its next date.** It never goes to Done and
+  never becomes a new row: one identity, so two phones converge.
+- **The next date comes from the due date, never from today** (Q3). Bins every other Tuesday stay
+  on Tuesdays however late they go out.
+- **A date past a short month's end falls on the last day** (Q6). 🚨 **This is not what iOS
+  does** (iOS skips the month), and it is deliberate. The verify has a control that fails if
+  someone "fixes" it to match iOS.
+- 🚨 **The clamp is never carried forward.** The wanted date lives in the rule, so 31 Jan → 28 Feb
+  → **31 Mar**. That is why presets are saved spelled out (`presetRule`: "Every Month" on the
+  31st is `M;1;BYMD=31`, built from the date at save time), not as "same day as last time".
+- **A fifth-weekday rule skips months that have none**, as iOS does. There is no sensible "last
+  day" stand-in for "the fifth Monday".
+- **Deleting a recurring job ends the series** (Q7): it goes to Done with its repeat cleared, so
+  nothing is left scheduled or alerting. A one-off is deleted as before.
+- An unparseable rule is a **one-off**, never a crash: ticking it marks it done.
 
 ## 13. Module: Due-soon banners
 
 `components/DueSoonBanners.tsx`. Every **open** job on either page that is due within 3 days or
-overdue gets a red banner, on **every tab**.
+overdue gets a red banner, on **every tab** (except House jobs' in a household of one, whose tab
+is hidden, §12).
 
 > It is deliberately separate from the reminder bell. **A job gets a banner whether or not its
 > reminder is on.** The bell is "tell me when I'm not looking at the app"; the banner is "you are
@@ -640,7 +693,7 @@ category that had not synced, a membership row mid-move — so trying again is u
 > 🚨 **Listly never offers "Set as me".** That is `people.linked_user_id`, a **ledger** concept
 > that is meaningless without a `people` row — and a `people` row carries a salary history, a pay
 > cycle, pots and pensions. It is not "a user of this app". Nothing in Listly is keyed on a person:
-> My jobs is keyed on the login itself, everything else on the household. Creating a `people` row
+> To-Do (`my_jobs`) is keyed on the login itself, everything else on the household. Creating a `people` row
 > from here would also open the D4 gate for someone with no ledger.
 
 What is shown instead is the **signed-in email** — the honest answer to "who am I in this app",
@@ -903,15 +956,25 @@ collide with another app's data.
 ## 22. Module: Reminders (push only)
 
 `lib/push.ts`, `lib/pushState.ts`, `components/RemindersSection.tsx` (in the Account sheet) and
-`public/sw.js`. The server half is `silver-octo-invention`: migration `20260921090000` and the
-`listly-reminders` Edge Function — `docs/listly-SUPABASE.md` → Reminders.
+`public/sw.js`. The server half is `silver-octo-invention`: migrations `20260921090000` and
+**`20260925090000`**, and the `listly-reminders` Edge Function — `docs/listly-SUPABASE.md` →
+Reminders.
 
-**What it does (Adam, 2026-09-21):** at **08:00 Europe/London**, every morning from **three days
-before** a job with its bell on is due, **until it is ticked done** — day −3, −2, −1 and the due
-day, never twice in one day. A House job reminds **both** household members; a My job only its
-owner. Overdue jobs are not pushed; the due-soon banners (§13) cover those. A notification opens
-Listly on that job's tab (`?tab=house|mine`; an already-open window is reused via a
-`listly:open` message, because a second window would fight the first for PowerSync's database).
+**What it does (Adam, 2026-09-21, reworked 2026-09-25).** One alert per job, set in the job sheet
+(§12), stored as `alert_offset` + `alert_time`, NULL for the default:
+
+| Alert | Pushes |
+|---|---|
+| **The default** (bell on, nothing chosen) | **08:00** every day from **3 days before**, **until ticked done — overdue included** |
+| A day or week offset ("2 days before", "1 week before") | the same daily reminder, from that many days before, at **the time chosen** (08:00 if none) |
+| An hour or minute offset (only with a due time) | **once**, at due time − offset; then, if still open, **08:00 daily from the day after it is due** |
+
+> 🚨 **Overdue jobs are now reminded.** Until 2026-09-25 reminders stopped on the due day and the
+> banners (§13) covered overdue jobs. Adam: "Keep nagging until done."
+
+A House job reminds **both** household members; a To-Do job only its owner. A notification opens
+Listly on that job's tab (`?tab=house|mine`; an already-open window is reused via a `listly:open`
+message, because a second window would fight the first for PowerSync's database).
 
 > 🚨 **There is no email fallback.** Dismissed 2026-09-21: no domain, no paid plan, and a free
 > provider without a verified domain delivers only to the account owner, so Ella could never have
@@ -954,23 +1017,27 @@ per device: sent, gone (and removed), or failed.
 
 ### The server half, in one paragraph
 
-An hourly `pg_cron` job (`0 * * * *` UTC) calls the `listly-reminders` Edge Function.
-`listly.claim_due_reminders()` answers only in the **08 hour, London time**, and writes each
-`reminder_log` row **before** anything is sent, keyed
-`'<job_table>:<job_id>:<due_date>:<user_id>:<london_send_date>'` — the user so both household
-members are reminded, the send date so it repeats each morning, and claim-before-send so a retry
-or an overlapping run never double-sends. The function sends Web Push (VAPID, aes128gcm) and
-deletes a subscription the push service reports as gone (404/410). Each day's notification carries
-its own `tag`, so iOS shows a fresh one each morning rather than silently replacing yesterday's.
-The test path needs the caller's JWT and refuses without one (401). `supabase/functions/` and
-`docs/listly-SUPABASE.md` in `silver-octo-invention` have the full detail.
+A `pg_cron` job runs **every minute** and calls the `listly-reminders` Edge Function only when
+`listly.reminders_pending()` says something is due, plus once on the hour as a heartbeat (so the
+live cron check can tell a quiet day from a dead schedule). **One SQL function decides what is
+due**, `listly.job_alert_candidates()`, and both the gate and `claim_due_reminders()` read it, so
+they cannot disagree. The claim writes each `reminder_log` row **before** anything is sent, keyed
+`'<table>:<job>:<user>:<london_day>:daily'` or `'<table>:<job>:<due_date>:<due_time>:<user>:once'`.
+🚨 **The daily key carries no due date, on purpose**: a recurring job ticked at 09:00 moves its
+date on, and with the date in the key it would push again a minute later. A daily slot is
+claimable from its time until the end of that day; a once slot for 60 minutes after its moment.
+The function sends Web Push (VAPID, aes128gcm), tags each notification with its claim key (so iOS
+shows a fresh one each day rather than replacing yesterday's), and deletes a subscription the push
+service reports as gone (404/410). The test path needs the caller's JWT and refuses without one
+(401).
 
 **Checking it live**, as the read-only `claude_ro` role:
-`silver-octo-invention/supabase/checks/20260921_listly_reminders_verify.sql` (the functions and
-rules, 20 rows) and `…_cron_verify.sql` (did the schedule fire, and what did the function answer —
-4 rows). 🚨 The second reads `net._http_response`, **not** `cron.job`: pg_cron puts RLS on its own
+`silver-octo-invention/supabase/checks/20260925_listly_job_alerts_verify.sql` (the columns, CHECKs,
+functions and rules, 24 rows; it supersedes `20260921_listly_reminders_verify.sql` for live runs)
+and `20260921_listly_reminders_cron_verify.sql` (did the schedule fire, and what did the function
+answer — 4 rows; still valid, because the every-minute job keeps an hourly heartbeat call). 🚨 The second reads `net._http_response`, **not** `cron.job`: pg_cron puts RLS on its own
 tables, so any role but the job's owner sees none of them. The first scheduled run, 2026-09-21
 07:00 UTC, answered HTTP 200.
 
-**Still to do (Phase 5 tasks, not code):** Ella's phone needs Listly on its Home Screen and
-permission granted from this section — now her only route to a reminder.
+**Both phones are set up** (confirmed 2026-09-23): Ella has Listly on her Home Screen with
+permission granted, which is her only route to a reminder.
