@@ -152,11 +152,11 @@ export function TimeWheel({
         <Drum label="Min" values={MINUTES} index={t.minute} pad onChange={(i) => setT({ ...t, minute: MINUTES[i] })} />
       </div>
 
-      {/* Only the 24-hour figure (Adam, 2026-09-25): the drums already show
-          the 12-hour time, and this is where Ella learns what it is on the
-          24-hour clock — the form the field and the job's chip will show. */}
+      {/* The 24-hour figure and nothing else (Adam, 2026-09-25): the drums
+          already show the 12-hour time, and this is where Ella learns what it
+          is on the 24-hour clock — the form the field and the chip show. */}
       <p className="help drum-readout">
-        That’s <b>{to24(t)}</b> on the 24-hour clock
+        {to24(t)}
       </p>
 
       <div className="actions">
