@@ -1067,6 +1067,11 @@ notifications*. Adam's decisions, 2026-09-25:
 | **New stuff to buy** | 5 minutes after the **first** item one person adds to one list | *"Ella added milk, eggs, bread and 2 more things to the Tesco shopping list."* — what she added in those 5 minutes that is **still on the list**, by its **current** name. Three names, then a count |
 | **Tesco complete** | every finished shop, priced or not | *"Adam bought everything on the list[ except for A, B and N more items][, and logged this on the joint account]."* |
 
+- **Finishing the shop cancels your own pending "added" push** (Adam, UAT 2026-09-25;
+  `20260925200000`): add a few things, finish the shop inside five minutes, and only "<List>
+  complete" is sent. Only the **same** person's finish cancels — if Ella finishes while Adam is
+  still adding at home, she still hears what he added. Items added after the finish are a new
+  batch.
 - **Never the person who did it**, never anyone who turned the switch off, nothing older than an
   hour. Names come from the ledger's "Set as me"; anyone unlinked is "Someone".
 - 🚨 **No amount, ever** ("just state 'Adam logged this on the joint account'"). The joint clause
