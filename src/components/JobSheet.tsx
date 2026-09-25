@@ -125,9 +125,19 @@ export function JobSheet({ page, jobId, onClose }: { page: JobPage; jobId: strin
         autoFocus={!job}
       />
 
+      {/* Every value here can be cleared with a real button. A native date or
+          time field has no clear control in most desktop browsers (Safari's
+          included) — found in UAT, 2026-09-25: "I can't clear due dates once
+          set, same for times" — and clearing the date is how a job stops
+          being dated, repeating and reminded. */}
       <div className="formrow">
         <span className="lbl">Due</span>
         <input type="date" value={draft.due} onChange={(e) => setDue(e.target.value)} aria-label="Due date" />
+        {draft.due && (
+          <button className="btn ghost small" onClick={() => setDue('')} aria-label="Clear the due date">
+            Clear
+          </button>
+        )}
       </div>
 
       {draft.due && (
@@ -135,8 +145,8 @@ export function JobSheet({ page, jobId, onClose }: { page: JobPage; jobId: strin
           <span className="lbl">Time</span>
           <input type="time" value={draft.dueTime} onChange={(e) => setTime(e.target.value)} aria-label="Due time" />
           {draft.dueTime && (
-            <button className="btn ghost small" onClick={() => setTime('')}>
-              No time
+            <button className="btn ghost small" onClick={() => setTime('')} aria-label="Clear the time">
+              Clear
             </button>
           )}
         </div>
