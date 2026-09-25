@@ -35,6 +35,7 @@ that must not be quietly undone. Start there; this is the map of everything else
 20. [Icons and the icon master](#20-icons-and-the-icon-master)
 21. [Build, deploy and environment](#21-build-deploy-and-environment)
 22. [Module: Reminders (push only)](#22-module-reminders-push-only)
+23. [Module: Shopping notifications](#23-module-shopping-notifications)
 
 ---
 
@@ -1051,3 +1052,57 @@ tables, so any role but the job's owner sees none of them. The first scheduled r
 
 **Both phones are set up** (confirmed 2026-09-23): Ella has Listly on her Home Screen with
 permission granted, which is her only route to a reminder.
+
+---
+
+## 23. Module: Shopping notifications
+
+`components/ShoppingPushToggle.tsx`, `lib/pushPrefs.ts`, the finish-shop paths in
+`context/ListlyContext.tsx`, and in `silver-octo-invention` migration `20260925180000` plus the
+same `listly-reminders` Edge Function as §22 — `docs/listly-SUPABASE.md` → *Shopping
+notifications*. Adam's decisions, 2026-09-25:
+
+| Push | When | Words |
+|---|---|---|
+| **New stuff to buy** | 5 minutes after the **first** item one person adds to one list | *"Ella added milk, eggs, bread and 2 more things to the Tesco shopping list."* — what she added in those 5 minutes that is **still on the list**, by its **current** name. Three names, then a count |
+| **Tesco complete** | every finished shop, priced or not | *"Adam bought everything on the list[ except for A, B and N more items][, and logged this on the joint account]."* |
+
+- **Never the person who did it**, never anyone who turned the switch off, nothing older than an
+  hour. Names come from the ledger's "Set as me"; anyone unlinked is "Someone".
+- 🚨 **No amount, ever** ("just state 'Adam logged this on the joint account'"). The joint clause
+  appears only when the ledger **really booked** it on the joint account — not on a Current
+  Account or pot shop, and not on a joint shop the ledger refused.
+- **All the words are built in SQL** (`claim_shopping_pushes()`), so the behaviour tests assert
+  the exact sentence a phone shows. Change them there.
+
+### Every finished shop is recorded now
+
+Until 2026-09-25 only a **priced** shop wrote a `shop_completions` row. Now `finishShop(listId,
+savedCompletionId)` writes an **unpriced** one (no amount) whenever there is no saved one — a
+household with no ledger, or "Don't price it" — **before** the ticked items are deleted, because
+they are its snapshot. It also records `items_left`, the unticked items, for "except for…".
+
+> 🚨 This is safe for the ledger only because `write_ledger_transaction()` returns before doing
+> anything when `amount` is null. An unpriced row books nothing and records no `ledger_error`, so
+> it never appears in the Retry banner (§14). `behaviour-listly-shopping-pushes.mjs` asserts both.
+
+### The switch
+
+One per **person**, on the Shopping page, saved on the server (`listly.push_prefs`) so it applies
+to every one of their phones. **Read and written over REST, not synced** (like
+`push_subscriptions`), so it needed no Sync Stream change; the last answer is cached per device
+only so it shows offline. No row means **on**. The line under it says when **this** device cannot
+receive notifications at all — a switch reading "on" on a phone that will never be told would be
+the lie §22 exists to prevent. Hidden in a household of one.
+
+"Delete my app data" does **not** clear it (Adam, 2026-09-25: "Fine to leave it"), for the same
+reason the ledger leaves its notification tables: a preference is not app data, and not editing
+`erase_my_data()` removes the one way this change could destroy the Listly block inside it.
+
+### `shopping_items.created_at`
+
+Stamped by the **server** default, never sent by the app (the column is not in `tables.ts`). It
+was added **without** back-filling: every item that existed before `20260925180000` is NULL and is
+never announced — otherwise the whole household's lists would have been pushed as "new" five
+minutes after the migration.
+

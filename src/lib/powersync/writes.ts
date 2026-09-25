@@ -127,10 +127,10 @@ export async function repositionItem(listId: string, itemId: string, toIndex: nu
 }
 
 /** The ticked item names, in list order, before Finish shop deletes them. */
-export async function tickedItemNames(listId: string): Promise<string[]> {
+export async function tickedItemNames(listId: string, done = true): Promise<string[]> {
   const rows = await powerSyncDb.getAll<Row>(
-    'SELECT text FROM lst_shopping_items WHERE list_id = ? AND done = 1 ORDER BY position, id',
-    [listId],
+    'SELECT text FROM lst_shopping_items WHERE list_id = ? AND done = ? ORDER BY position, id',
+    [listId, done ? 1 : 0],
   )
   return rows.map((r) => String(r.text ?? '')).filter(Boolean)
 }
@@ -167,8 +167,8 @@ export async function insertShopCompletion(
     `INSERT INTO lst_shop_completions
        (id, household_id, list_id, list_name, completed_at, amount, spend_date,
         category_id, payment_method, location, owner_id, pot_id, items_snapshot,
-        rounded_from, rounding_pot_id, round_up_skipped)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'card', ?, ?, ?, ?, ?, ?, ?)`,
+        rounded_from, rounding_pot_id, round_up_skipped, items_left)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'card', ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       householdId,
@@ -196,7 +196,30 @@ export async function insertShopCompletion(
       // 1/0, not true/false: SQLite holds booleans as integers, and
       // toServerRecord turns this back into a real boolean on the way up.
       draft.roundUpSkipped ? 1 : 0,
+      // What was left UNticked — "except for…" in the partner's push.
+      toDbId(draft.itemsLeft),
     ],
+  )
+  return id
+}
+
+/**
+ * A shop finished WITHOUT a price — no ledger, or "Don't price it" (Adam,
+ * 2026-09-25: every finished shop is announced). No amount, so the ledger
+ * trigger returns before doing anything ("an unpriced shop. A legitimate
+ * outcome"): nothing is booked and no error is recorded. The row exists only
+ * so the other person's phone can be told "Tesco complete".
+ */
+export async function insertUnpricedCompletion(
+  householdId: string,
+  shop: { listId: string; listName: string; itemsSnapshot: string; itemsLeft: string },
+): Promise<string> {
+  const id = newId()
+  await powerSyncDb.execute(
+    `INSERT INTO lst_shop_completions (id, household_id, list_id, list_name, completed_at, items_snapshot, items_left)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [id, householdId, toDbId(shop.listId), shop.listName, new Date().toISOString(),
+      toDbId(shop.itemsSnapshot), toDbId(shop.itemsLeft)],
   )
   return id
 }

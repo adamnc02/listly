@@ -135,6 +135,8 @@ export interface ShopCompletionDraft {
   listName: string
   /** Kept in Listly only. The ledger trigger never reads it. */
   itemsSnapshot: string
+  /** The items left UNticked, newline-joined — "except for…" in the push. */
+  itemsLeft: string
   categoryId: string
   /**
    * What is BOOKED. Already the ROUNDED figure (£8.00) on a shop that

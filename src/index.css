@@ -730,6 +730,10 @@ nav button[aria-current=page] { background: var(--brown); color: #fff; }
   padding: 0 12px;
 }
 .actions { display: flex; align-items: center; gap: 10px; padding-top: 4px; }
+/* The Shopping page's "Notify me about shopping" card (TECHNICAL.md §23). */
+.shop-notify { padding: 8px 14px 12px; display: flex; flex-direction: column; gap: 4px; }
+.shop-notify .help { margin: 0; font-size: 19px; line-height: 1.2; color: var(--muted); }
+.shop-notify .help.warn { color: var(--brown-2); }
 
 /* ---------- the job sheet (PROMPT-01 §A4) ---------- */
 /* One label + control(s) per line. Native <select> and time inputs on

@@ -7,6 +7,7 @@ import { FinishShopSheet } from '../components/FinishShopSheet'
 import { LedgerErrors } from '../components/LedgerErrors'
 import { ShopConfirmation } from '../components/ShopConfirmation'
 import { Sliders } from '../components/Icons'
+import { ShoppingPushToggle } from '../components/ShoppingPushToggle'
 
 export function Shopping() {
   const { visibleLists, addList, finishShop } = useListly()
@@ -87,6 +88,9 @@ export function Shopping() {
         </p>
       )}
 
+      {/* The per-person shopping-notifications switch (TECHNICAL.md §23). */}
+      <ShoppingPushToggle />
+
       {manageOpen && <ManageListsSheet onClose={() => setManageOpen(false)} />}
       {pricing && (
         <FinishShopSheet
@@ -97,7 +101,7 @@ export function Shopping() {
           // ticked items go and the list collapse. Only a Save hands back an
           // id — "Don't price it" sent nothing, so there is nothing to confirm.
           onComplete={(completionId) => {
-            void finishShop(pricing.listId)
+            void finishShop(pricing.listId, completionId)
             setPricing(null)
             if (completionId) setConfirming(completionId)
           }}
