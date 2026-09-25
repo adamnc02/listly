@@ -118,6 +118,14 @@ export const CheckSquare = () => (
   </Line>
 )
 
+/** Opens the 12-hour time picker beside a time field (2026-09-25). */
+export const Clock = () => (
+  <Line size={22}>
+    <circle cx="12" cy="12" r="8.5" />
+    <path d="M12 7.5V12l3 2" />
+  </Line>
+)
+
 export const Bell = () => (
   <Line size={22}>
     <path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15z" />

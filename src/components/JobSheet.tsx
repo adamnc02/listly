@@ -2,6 +2,8 @@ import { useState } from 'react'
 import type { JobDraft, JobPage } from '../types'
 import { useListly } from '../context/ListlyContext'
 import { Sheet } from './Sheet'
+import { TimeWheel } from './TimeWheel'
+import { Clock } from './Icons'
 import { EMPTY_DRAFT } from '../lib/jobs'
 import {
   DAY_OFFSETS, DEFAULT_OFFSET, DEFAULT_TIME, isTimedOffset, offsetLabel, TIME_OFFSETS,
@@ -58,7 +60,8 @@ export function JobSheet({ page, jobId, onClose }: { page: JobPage; jobId: strin
   const [custom, setCustom] = useState<Rule | null>(() =>
     job && presetOf(job.repeat, job.due) === 'custom' ? parseRule(job.repeat) : null,
   )
-  const [step, setStep] = useState<'job' | 'custom'>('job')
+  // 'due-time' / 'alert-time': the 12-hour picker, for that field.
+  const [step, setStep] = useState<'job' | 'custom' | 'due-time' | 'alert-time'>('job')
   const [hint, setHint] = useState<string | null>(null)
 
   // Editing a job that another phone has just deleted: nothing to edit.
@@ -99,6 +102,27 @@ export function JobSheet({ page, jobId, onClose }: { page: JobPage; jobId: strin
     return (
       <Sheet label="Custom repeat" onClose={onClose}>
         <CustomRepeat rule={custom} due={draft.due} onChange={setCustom} onDone={() => setStep('job')} />
+      </Sheet>
+    )
+  }
+
+  // The 12-hour picker is a step of THIS sheet, like Custom, not a second
+  // sheet on top: two stacked sheets would both close on one Escape.
+  if (step === 'due-time' || step === 'alert-time') {
+    const due = step === 'due-time'
+    return (
+      <Sheet label={due ? 'Due time' : 'Alert time'} onClose={onClose}>
+        <TimeWheel
+          title={due ? 'Due time' : 'Alert time'}
+          value={due ? draft.dueTime : draft.alertTime}
+          fallback={due ? '' : DEFAULT_TIME}
+          onSet={(hhmm) => {
+            if (due) setTime(hhmm)
+            else set({ alertTime: hhmm === DEFAULT_TIME ? '' : hhmm })
+            setStep('job')
+          }}
+          onCancel={() => setStep('job')}
+        />
       </Sheet>
     )
   }
@@ -144,6 +168,9 @@ export function JobSheet({ page, jobId, onClose }: { page: JobPage; jobId: strin
         <div className="formrow">
           <span className="lbl">Time</span>
           <input type="time" value={draft.dueTime} onChange={(e) => setTime(e.target.value)} aria-label="Due time" />
+          <button className="icon-btn clock" onClick={() => setStep('due-time')} aria-label="Pick the due time on a 12-hour clock">
+            <Clock />
+          </button>
           {draft.dueTime && (
             <button className="btn ghost small" onClick={() => setTime('')} aria-label="Clear the time">
               Clear
@@ -208,6 +235,11 @@ export function JobSheet({ page, jobId, onClose }: { page: JobPage; jobId: strin
                 onChange={(e) => set({ alertTime: e.target.value === DEFAULT_TIME ? '' : e.target.value })}
                 aria-label="Alert time"
               />
+            )}
+            {!isTimedOffset(offset) && (
+              <button className="icon-btn clock" onClick={() => setStep('alert-time')} aria-label="Pick the alert time on a 12-hour clock">
+                <Clock />
+              </button>
             )}
           </div>
           <p className="help">
