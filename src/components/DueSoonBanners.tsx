@@ -3,7 +3,7 @@ import { isDismissedToday } from '../lib/deviceState'
 import { dueLabel, isDueSoon } from '../lib/jobs'
 import { Close, Warn } from './Icons'
 
-const SHORT = { house: 'House job', mine: 'My job' } as const
+const SHORT = { house: 'House job', mine: 'To-Do' } as const
 
 /**
  * The red due-soon banners (TECHNICAL.md §13).
@@ -21,10 +21,14 @@ const SHORT = { house: 'House job', mine: 'My job' } as const
  * and saving the job re-arms it.
  */
 export function DueSoonBanners() {
-  const { jobs, device, dismissBanner } = useListly()
+  const { jobs, device, dismissBanner, householdSize } = useListly()
+  // House jobs is hidden for a household of one (PROMPT-01 Q11), and so are
+  // its banners: a banner for a tab you cannot open is a dead end.
+  const houseHidden = householdSize === 1
 
   const due = jobs
     .filter((j) => !j.done && j.due && isDueSoon(j.due) && !isDismissedToday(device, j.id))
+    .filter((j) => !(houseHidden && j.page === 'house'))
     .sort((a, b) => (a.due < b.due ? -1 : a.due > b.due ? 1 : 0))
 
   return (
@@ -35,7 +39,7 @@ export function DueSoonBanners() {
           <div className="grow">
             <div className="t">{job.text}</div>
             <div className="w">
-              {SHORT[job.page]} · {dueLabel(job.due)}
+              {SHORT[job.page]} · {dueLabel(job.due, job.dueTime)}
             </div>
           </div>
           <button

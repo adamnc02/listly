@@ -2,13 +2,15 @@ import { useState } from 'react'
 import type { JobPage } from '../types'
 import { useListly } from '../context/ListlyContext'
 import { dueLabel, isDueSoon, sortOpenJobs } from '../lib/jobs'
-import { JobEditSheet } from '../components/JobEditSheet'
-import { Bell, Chevron, Tick } from '../components/Icons'
+import { shortRule } from '../lib/recurrence'
+import { alertSummary } from '../lib/alerts'
+import { JobSheet } from '../components/JobSheet'
+import { Bell, Chevron, Plus, Tick } from '../components/Icons'
 
-const TITLE: Record<JobPage, string> = { house: 'House jobs', mine: 'My jobs' }
+const TITLE: Record<JobPage, string> = { house: 'House jobs', mine: 'To-Do' }
 
 /**
- * House jobs and My jobs are the same page with different data — the two
+ * House jobs and To-Do are the same page with different data — the two
  * pages are identical in behaviour and each has its own jobs (TECHNICAL.md
  * §12) — so they are ONE component parameterised by `page`.
  *
@@ -17,70 +19,34 @@ const TITLE: Record<JobPage, string> = { house: 'House jobs', mine: 'My jobs' }
  * because the RLS predicate and the Sync Stream predicate genuinely differ
  * (household vs user) — but the React component is written once. Two
  * tables, one component, on purpose.
+ *
+ * "To-Do" is the page's NAME only (Adam, 2026-09-25). The table is still
+ * `my_jobs` and the page id still 'mine', so `?tab=mine` deep links from
+ * notifications keep working — renaming a published table is what
+ * MIGRATION-LESSONS §19 forbids.
+ *
+ * There is no inline add form any more: the + beside the count opens the
+ * same sheet a tap on a job does, because a job now has a repeat and an
+ * alert to set as well as a name and a date (PROMPT-01 §A4).
  */
 export function JobsPage({ page }: { page: JobPage }) {
-  const { jobsFor, device, addJob, toggleJob, toggleRemind, setDoneOpen } = useListly()
-  const [text, setText] = useState('')
-  const [due, setDue] = useState('')
-  const [editing, setEditing] = useState<string | null>(null)
-  const [hint, setHint] = useState<string | null>(null)
+  const { jobsFor, device, toggleJob, toggleRemind, setDoneOpen } = useListly()
+  // null = closed, 'new' = creating, otherwise the id being edited.
+  const [sheet, setSheet] = useState<string | null>(null)
 
   const all = jobsFor(page)
   const open = sortOpenJobs(all.filter((j) => !j.done))
   const done = all.filter((j) => j.done)
   const doneOpen = device.doneOpen[page]
 
-  // A job needs a name; a due date is optional. Say so rather than ignoring
-  // the tap — the same rule as every other "add" in the app.
-  const submit = () => {
-    const trimmed = text.trim()
-    if (!trimmed) {
-      setHint('Give the job a name first.')
-      return
-    }
-    setHint(null)
-    void addJob(page, trimmed, due)
-      .then(() => {
-        setText('')
-        setDue('')
-      })
-      .catch((e: unknown) =>
-        setHint(`Couldn't add it: ${e instanceof Error ? e.message : String(e)}`),
-      )
-  }
-
   return (
     <div className="stack">
       <div className="pagehead">
-        <h1>{TITLE[page]}</h1>
+        <h1 className="grow">{TITLE[page]}</h1>
         <span>{open.length} to do</span>
-      </div>
-
-      <div className="card jobform">
-        <input
-          className="line-input"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') submit()
-          }}
-          placeholder="Add a job…"
-          aria-label="New job"
-        />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <label className="due-lbl">
-            Due
-            <input type="date" value={due} onChange={(e) => setDue(e.target.value)} />
-          </label>
-          <button className={`btn sage${text.trim() ? '' : ' waiting'}`} onClick={submit}>
-            Add
-          </button>
-        </div>
-        {hint && !text.trim() && (
-          <p className="help" style={{ color: 'var(--red)', margin: 0 }} role="alert">
-            {hint}
-          </p>
-        )}
+        <button className="icon-btn round-add" onClick={() => setSheet('new')} aria-label={`Add a job to ${TITLE[page]}`}>
+          <Plus />
+        </button>
       </div>
 
       <div className="card jobs">
@@ -94,13 +60,24 @@ export function JobsPage({ page }: { page: JobPage }) {
             >
               <span className="box" />
             </button>
-            <button className="jobtext" onClick={() => setEditing(job.id)}>
+            <button className="jobtext" onClick={() => setSheet(job.id)}>
               <span className="t">{job.text}</span>
               {job.due && (
-                <span className={`chip${isDueSoon(job.due) ? ' soon' : ''}`}>{dueLabel(job.due)}</span>
+                <span className={`chip${isDueSoon(job.due) ? ' soon' : ''}`}>{dueLabel(job.due, job.dueTime)}</span>
+              )}
+              {/* The repeat whenever there is one; the alert only when it is
+                  not the default (Adam, 2026-09-25). */}
+              {job.due && (job.repeat || (job.remind && (job.alertOffset || job.alertTime))) && (
+                <span className="jobmeta">
+                  {[shortRule(job.repeat), job.remind ? alertSummary(job.alertOffset, job.alertTime) : '']
+                    .filter(Boolean)
+                    .join(' · ')}
+                </span>
               )}
             </button>
-            {/* The bell shows only when there is a due date to remind about. */}
+            {/* The bell shows only when there is a due date to remind about.
+                It switches this job's alerts off and on; the alert settings
+                themselves are kept either way. */}
             {job.due && (
               <button
                 className="icon-btn bell"
@@ -148,7 +125,7 @@ export function JobsPage({ page }: { page: JobPage }) {
         )}
       </div>
 
-      {editing && <JobEditSheet jobId={editing} onClose={() => setEditing(null)} />}
+      {sheet && <JobSheet page={page} jobId={sheet === 'new' ? null : sheet} onClose={() => setSheet(null)} />}
     </div>
   )
 }

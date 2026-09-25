@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import type {
-  DeviceState, IsoDate, Job, JobPage, LedgerCategory, List, ShopCompletionDraft,
+  DeviceState, Job, JobDraft, JobPage, LedgerCategory, List, ShopCompletionDraft,
 } from '../types'
 import {
   clearDismissal,
@@ -25,6 +25,7 @@ import type { LocationOption } from '../types'
 import { useWatchedQuery } from '../lib/powersync/useWatchedQuery'
 import { byPosition, rowToItem, rowToJob, rowToList } from '../lib/powersync/mapping'
 import * as writes from '../lib/powersync/writes'
+import { nextOccurrence } from '../lib/recurrence'
 
 /**
  * Listly's data layer, now backed by PowerSync.
@@ -99,11 +100,18 @@ interface ListlyValue {
   retryLedger: (completionId: string) => void
 
   jobsFor: (page: JobPage) => Job[]
-  addJob: (page: JobPage, text: string, due: IsoDate) => Promise<void>
+  addJob: (page: JobPage, draft: JobDraft) => Promise<void>
+  /** Tick or un-tick. A RECURRING open job moves on to its next date instead
+   *  of going to Done (PROMPT-01 Q2). */
   toggleJob: (id: string) => void
   toggleRemind: (id: string) => void
-  saveJob: (id: string, text: string, due: IsoDate, remind: boolean) => void
+  saveJob: (id: string, draft: JobDraft) => void
+  /** A one-off is deleted; a recurring job ends its series and goes to Done
+   *  (Q7). */
   deleteJob: (id: string) => void
+  /** How many people are in this household, from the synced membership
+   *  mirror. 0 until it has synced — "unknown", never "alone". */
+  householdSize: number
   setDoneOpen: (page: JobPage, open: boolean) => void
 
   dismissBanner: (jobId: string) => void
@@ -133,6 +141,13 @@ export function ListlyProvider({ children }: { children: ReactNode }) {
   const itemRows = useWatchedQuery('SELECT * FROM lst_shopping_items')
   const houseRows = useWatchedQuery('SELECT * FROM lst_house_jobs')
   const mineRows = useWatchedQuery('SELECT * FROM lst_my_jobs')
+  // One member → House jobs is hidden (PROMPT-01 Q11). Read from the synced
+  // mirror, so it works offline and follows a partner joining or leaving.
+  const memberRows = useWatchedQuery(
+    'SELECT user_id FROM lst_ref_household_members WHERE household_id = ?',
+    [householdId],
+  )
+  const householdSize = memberRows.length
 
   const lists = useMemo<List[]>(() => {
     const byList = new Map<string, typeof itemRows>()
@@ -345,10 +360,9 @@ export function ListlyProvider({ children }: { children: ReactNode }) {
   const jobsFor = useCallback((page: JobPage) => jobs.filter((j) => j.page === page), [jobs])
 
   const addJob = useCallback(
-    async (page: JobPage, text: string, due: IsoDate) => {
-      const trimmed = text.trim()
-      if (!trimmed) return
-      await writes.insertJob(page, householdId, trimmed, due)
+    async (page: JobPage, draft: JobDraft) => {
+      if (!draft.text.trim()) return
+      await writes.insertJob(page, householdId, draft)
     },
     [householdId],
   )
@@ -356,7 +370,18 @@ export function ListlyProvider({ children }: { children: ReactNode }) {
   const toggleJob = useCallback(
     (id: string) => {
       const job = findJob(id)
-      if (job) run(writes.setJobDone(job.page, id, !job.done))
+      if (!job) return
+      // 🚨 A recurring job moves on from its DUE date, never from today (Q3),
+      // and stays open. An unparseable rule has no next date, so it falls
+      // through and is ticked done like a one-off rather than stuck.
+      const next = !job.done && job.repeat && job.due ? nextOccurrence(job.repeat, job.due) : null
+      if (next) {
+        run(writes.advanceJob(job.page, id, next))
+        // A new due date is a new job as far as the banner is concerned.
+        setDevice((d) => clearDismissal(d, id))
+        return
+      }
+      run(writes.setJobDone(job.page, id, !job.done))
     },
     [findJob],
   )
@@ -372,10 +397,10 @@ export function ListlyProvider({ children }: { children: ReactNode }) {
   )
 
   const saveJob = useCallback(
-    (id: string, text: string, due: IsoDate, remind: boolean) => {
+    (id: string, draft: JobDraft) => {
       const job = findJob(id)
       if (!job) return
-      run(writes.saveJob(job.page, id, text.trim() || job.text, due, remind))
+      run(writes.saveJob(job.page, id, { ...draft, text: draft.text.trim() || job.text }))
       // Editing and saving a job re-arms its banner.
       setDevice((d) => clearDismissal(d, id))
     },
@@ -385,7 +410,8 @@ export function ListlyProvider({ children }: { children: ReactNode }) {
   const deleteJob = useCallback(
     (id: string) => {
       const job = findJob(id)
-      if (job) run(writes.deleteJob(job.page, id))
+      if (!job) return
+      run(job.repeat && !job.done ? writes.endJobSeries(job.page, id) : writes.deleteJob(job.page, id))
     },
     [findJob],
   )
@@ -403,7 +429,7 @@ export function ListlyProvider({ children }: { children: ReactNode }) {
       lists, jobs, device, visibleLists,
       addList, deleteList, toggleDefault, setListOpen,
       addItem, toggleItem, saveItem, deleteItem, reorderItems, snapshotShop, finishShop,
-      jobsFor, addJob, toggleJob, toggleRemind, saveJob, deleteJob, setDoneOpen,
+      jobsFor, addJob, toggleJob, toggleRemind, saveJob, deleteJob, setDoneOpen, householdSize,
       dismissBanner,
       ledgerGateOpen, categories, locationOptions, setListCategory,
       saveShopCompletion, failedCompletions, retryLedger,
@@ -412,7 +438,7 @@ export function ListlyProvider({ children }: { children: ReactNode }) {
       lists, jobs, device, visibleLists,
       addList, deleteList, toggleDefault, setListOpen,
       addItem, toggleItem, saveItem, deleteItem, reorderItems, snapshotShop, finishShop,
-      jobsFor, addJob, toggleJob, toggleRemind, saveJob, deleteJob, setDoneOpen,
+      jobsFor, addJob, toggleJob, toggleRemind, saveJob, deleteJob, setDoneOpen, householdSize,
       dismissBanner,
       ledgerGateOpen, categories, locationOptions, setListCategory,
       saveShopCompletion, failedCompletions, retryLedger,

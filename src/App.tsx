@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { AuthGate } from './components/AuthGate'
 import { SyncRoot } from './components/SyncRoot'
-import { ListlyProvider } from './context/ListlyContext'
+import { ListlyProvider, useListly } from './context/ListlyContext'
 import { DueSoonBanners } from './components/DueSoonBanners'
 import { BottomNav } from './components/BottomNav'
 import { Shopping } from './pages/Shopping'
@@ -49,6 +49,14 @@ function Shell() {
   }, [])
   const [accountOpen, setAccountOpen] = useState(false)
 
+  // A household of ONE has no House jobs tab (PROMPT-01 Q11). Exactly one:
+  // 0 means the membership has not synced yet, which is "unknown", and
+  // hiding the tab on every cold start would make it flicker. If the tab is
+  // hidden while showing, Shopping stands in.
+  const { householdSize } = useListly()
+  const showHouse = householdSize !== 1
+  const shown: Tab = tab === 'house' && !showHouse ? 'shopping' : tab
+
   return (
     <div className="app">
       {/* Brand hard left, account hard right (Adam, 2026-09-20). The date
@@ -76,15 +84,15 @@ function Shell() {
           header — which does not scroll — and fade the wrong thing. */}
       <div className="main-wrap">
         <main>
-          {tab === 'shopping' && <Shopping />}
-          {tab === 'house' && <JobsPage page="house" />}
-          {tab === 'mine' && <JobsPage page="mine" />}
+          {shown === 'shopping' && <Shopping />}
+          {shown === 'house' && <JobsPage page="house" />}
+          {shown === 'mine' && <JobsPage page="mine" />}
         </main>
         <div className="edge-fade edge-fade-top" aria-hidden="true" />
         <div className="edge-fade edge-fade-bottom" aria-hidden="true" />
       </div>
 
-      <BottomNav tab={tab} onChange={setTab} />
+      <BottomNav tab={shown} onChange={setTab} showHouse={showHouse} />
 
       {accountOpen && <AccountModal onClose={() => setAccountOpen(false)} />}
     </div>

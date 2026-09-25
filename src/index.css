@@ -494,8 +494,7 @@ main {
 /* ---------- jobs ---------- */
 .jobform { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
 .jobform .line-input { width: 100%; font-size: 26px; }
-.due-lbl { display: flex; align-items: center; gap: 8px; flex: 1; font-size: 20px; color: var(--muted); }
-input[type=date] {
+input[type=date], input[type=time] {
   flex: 1; min-width: 0;
   height: 40px;
   border: 1.5px solid var(--line);
@@ -515,6 +514,9 @@ input[type=date] {
   padding: 4px 8px 4px 4px;
 }
 .jobtext .t { font-size: 26px; line-height: 1.1; }
+/* The row's small text: the repeat, and an alert that is not the default
+   (PROMPT-01 §A5). Chip-sized, muted, and never louder than the due chip. */
+.jobmeta { font-size: 18px; line-height: 1.15; color: var(--muted); }
 .chip { font-size: 18px; padding: 1px 10px; border-radius: 999px; background: var(--chip-bg); color: var(--brown-2); }
 .chip.soon { background: var(--chip-soon-bg); color: var(--chip-soon-ink); }
 .bell { color: var(--bell-off); }
@@ -728,6 +730,99 @@ nav button[aria-current=page] { background: var(--brown); color: #fff; }
   padding: 0 12px;
 }
 .actions { display: flex; align-items: center; gap: 10px; padding-top: 4px; }
+
+/* ---------- the job sheet (PROMPT-01 §A4) ---------- */
+/* One label + control(s) per line. Native <select> and time inputs on
+   purpose: on an iPhone they open the system wheel, which is the iOS
+   Calendar feel the Repeat screen is modelled on. */
+.formrow { display: flex; align-items: center; gap: 10px; min-height: 44px; }
+.formrow .lbl { min-width: 74px; }
+.formrow .unit { font-size: 22px; color: var(--soft); }
+.sheet select {
+  flex: 1; min-width: 0;
+  height: 44px;
+  border: 1.5px solid var(--line);
+  border-radius: 10px;
+  background: var(--ground);
+  color: var(--ink);
+  font: inherit;
+  font-size: 20px;
+  padding: 0 8px;
+}
+.btn.small { height: 44px; padding: 0 12px; font-size: 18px; }
+
+/* ---------- the 12-hour time picker (TimeWheel.tsx) ----------
+   BLOC's rest-timer drum, in Listly's colours: three 56px rows showing, the
+   middle one chosen, a --line-2 rule either side of it, and the rows above
+   and below fading into --paper. 🚨 .drum's height is exactly three rows
+   (DRUM_H in TimeWheel.tsx) or the chosen row stops being centred. */
+.icon-btn.clock { color: var(--brown-2); border: 2px solid var(--line-2); }
+.ampm { justify-content: center; }
+.ampm button { min-width: 88px; }
+.drums { display: flex; justify-content: center; align-items: flex-end; gap: 4px; user-select: none; -webkit-user-select: none; }
+.drum-wrap { text-align: center; }
+.drum-label { font-size: 18px; color: var(--muted); margin-bottom: 4px; }
+.drum {
+  position: relative;
+  width: 104px;
+  height: 168px;
+  overflow: hidden;
+  cursor: ns-resize;
+  touch-action: none;
+  outline: none;
+  border-radius: 12px;
+}
+.drum:focus-visible { box-shadow: 0 0 0 2px var(--sage); }
+.drum-col { display: flex; flex-direction: column; align-items: center; will-change: transform; }
+.drum-col.settle { transition: transform .15s ease; }
+.drum-row {
+  height: 56px; line-height: 56px;
+  width: 104px;
+  flex-shrink: 0;
+  text-align: center;
+  font-size: 44px; font-weight: 700;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.drum-band {
+  position: absolute; left: 0; right: 0; top: 56px; height: 56px;
+  border-top: 2px solid var(--line-2); border-bottom: 2px solid var(--line-2);
+  pointer-events: none; z-index: 1;
+}
+.drum-fade {
+  position: absolute; inset: 0; z-index: 2; pointer-events: none;
+  background: linear-gradient(to bottom, var(--paper) 0%, rgba(255, 252, 247, 0) 35%,
+                                         rgba(255, 252, 247, 0) 65%, var(--paper) 100%);
+}
+.drum-colon { font-size: 44px; font-weight: 700; color: var(--muted); height: 168px; line-height: 168px; }
+.sheet .help.drum-readout { text-align: center; margin: 0; font-size: 22px; }
+.summary-btn {
+  min-height: 44px;
+  text-align: left;
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  background: var(--sage-wash);
+  color: var(--ink);
+  font-size: 20px;
+  padding: 8px 12px;
+}
+.summary-btn .edit { color: var(--brown); font-weight: 700; margin-left: 6px; }
+/* The Custom screen's weekday, date and month grids. Every cell is a 44px
+   tap target; picked is --sage like every other "on" in the app. */
+.grid { display: grid; gap: 6px; }
+.grid7 { grid-template-columns: repeat(7, 1fr); }
+.grid4 { grid-template-columns: repeat(4, 1fr); }
+.grid button {
+  min-height: 44px;
+  min-width: 0;
+  border: 1.5px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 20px;
+  padding: 0;
+}
+.grid button[aria-pressed=true] { background: var(--sage); border-color: var(--sage); color: #fff; }
 .mrow {
   display: flex; align-items: center; gap: 6px;
   min-height: 52px;

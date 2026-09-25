@@ -109,6 +109,23 @@ export const Me = () => (
   </Line>
 )
 
+/** The To-Do tab (Adam, 2026-09-25): a ticked box, drawn to the same 2px
+ *  rounded-line rule as the rest. */
+export const CheckSquare = () => (
+  <Line>
+    <rect x="4" y="4" width="16" height="16" rx="4.5" />
+    <path d="M8.5 12.3l2.4 2.4 4.7-5.2" />
+  </Line>
+)
+
+/** Opens the 12-hour time picker beside a time field (2026-09-25). */
+export const Clock = () => (
+  <Line size={22}>
+    <circle cx="12" cy="12" r="8.5" />
+    <path d="M12 7.5V12l3 2" />
+  </Line>
+)
+
 export const Bell = () => (
   <Line size={22}>
     <path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15z" />

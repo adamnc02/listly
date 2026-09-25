@@ -1,5 +1,7 @@
-import type { IsoDate, Job } from '../types'
+import type { IsoDate, Job, JobDraft } from '../types'
 import { parseLocalDate, todayIso } from './date'
+import { normaliseAlert, isHhMm } from './alerts'
+import { parseRule } from './recurrence'
 
 /**
  * Job due-date logic. Every date here goes through src/lib/date.ts.
@@ -38,15 +40,64 @@ function pretty(iso: IsoDate): string {
   })
 }
 
-/** The chip's wording, matching the prototype exactly. */
-export function dueLabel(iso: IsoDate): string {
+/** The chip's wording, matching the prototype exactly — plus the due time,
+ *  when the job has one (PROMPT-01 §A5). */
+export function dueLabel(iso: IsoDate, time = ''): string {
   const n = daysUntil(iso)
+  const at = time ? ` · ${time}` : ''
   if (n < -1) return `Overdue by ${-n} days`
   if (n === -1) return 'Overdue since yesterday'
-  if (n === 0) return 'Due today'
-  if (n === 1) return 'Due tomorrow'
-  if (n <= 3) return `Due in ${n} days · ${pretty(iso)}`
-  return `Due ${pretty(iso)}`
+  if (n === 0) return `Due today${at}`
+  if (n === 1) return `Due tomorrow${at}`
+  if (n <= 3) return `Due in ${n} days · ${pretty(iso)}${at}`
+  return `Due ${pretty(iso)}${at}`
+}
+
+/** What a job's row holds in the database, NULL where the app says ''. */
+export interface JobColumns {
+  text: string
+  due_date: string | null
+  due_time: string | null
+  repeat_rule: string | null
+  remind: 0 | 1
+  alert_offset: string | null
+  alert_time: string | null
+}
+
+/**
+ * The create/edit sheet's answers, as the columns to write.
+ *
+ * 🚨 EVERY RULE HERE EXISTS BECAUSE THE DATABASE WOULD OTHERWISE REFUSE THE
+ * ROW — and PowerSync DISCARDS a refused upload silently (§27), so the job
+ * would look saved on this phone and exist nowhere else. So nothing that
+ * reaches a job table is built any other way:
+ *
+ *   - no due date → no time, no repeat, bell off, default alert
+ *     (`remind_needs_due`, and a repeat needs a date to repeat FROM);
+ *   - no due time → no hour/minute offset (`timed_alert_needs_time`);
+ *   - a malformed time or rule → dropped rather than sent.
+ */
+export function jobColumns(draft: JobDraft): JobColumns {
+  const text = draft.text.trim()
+  if (!draft.due) {
+    return { text, due_date: null, due_time: null, repeat_rule: null, remind: 0, alert_offset: null, alert_time: null }
+  }
+  const dueTime = isHhMm(draft.dueTime) ? draft.dueTime : ''
+  const alert = normaliseAlert(draft.alertOffset, draft.alertTime, dueTime)
+  return {
+    text,
+    due_date: draft.due,
+    due_time: dueTime || null,
+    repeat_rule: draft.repeat && parseRule(draft.repeat) ? draft.repeat : null,
+    remind: draft.remind ? 1 : 0,
+    alert_offset: alert.offset || null,
+    alert_time: alert.time || null,
+  }
+}
+
+/** A job the sheet has not touched yet: the bell comes on with a date (Q10). */
+export const EMPTY_DRAFT: JobDraft = {
+  text: '', due: '', dueTime: '', repeat: '', remind: false, alertOffset: '', alertTime: '',
 }
 
 /**

@@ -1,8 +1,9 @@
 # Listly — architecture
 
-How the app is put together, and why. **State: Phases 1–4 complete and UAT-signed-off
-(2026-09-20).** The ledger bridge is live and proven end to end on a real account; reminders
-(Phase 5) are not built.
+How the app is put together, and why. **State: all six phases complete, live and
+UAT-signed-off.** The ledger bridge is proven end to end on a real account. Reminders are push
+only and per job (`TECHNICAL.md` §22); recurring jobs and per-job alerts arrived on 2026-09-25
+(`TECHNICAL.md` §12).
 
 ---
 

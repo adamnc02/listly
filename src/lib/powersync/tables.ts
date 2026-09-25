@@ -55,9 +55,12 @@ export const LEDGER_SCHEMA = 'shared_finance_ledger'
 
 const H = { household_id: 'text' } as const
 const P = { position: 'real' } as const
-/** house_jobs and my_jobs are the same shape; only their scoping differs. */
+/** house_jobs and my_jobs are the same shape; only their scoping differs.
+ *  The last four (20260925090000) are recurrence and alerts — columns, not a
+ *  table, so the streams' `SELECT *` carries them with no redeploy. */
 const JOB = {
   text: 'text', due_date: 'text', remind: 'bool', done: 'bool', done_at: 'text', ...P,
+  due_time: 'text', repeat_rule: 'text', alert_offset: 'text', alert_time: 'text',
 } as const
 
 function own(remote: string, columns: Record<string, ColumnKind>, household = true): SyncedTable {

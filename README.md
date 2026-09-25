@@ -1,7 +1,7 @@
 # Listly
 
 A phone-first PWA for shopping lists and jobs, shared between two phones. Three tabs — **Shopping**,
-**House jobs**, **My jobs** — and one thing that is not obvious from those: finishing a shop can post
+**House jobs**, **To-Do** (called My jobs until 2026-09-25) — and one thing that is not obvious from those: finishing a shop can post
 the spend into [`shared-finance-ledger`](https://github.com/adamnc02/shared-finance-ledger) as a real
 transaction.
 
@@ -148,7 +148,7 @@ all for a week.
 ### A different account signing in clears the device first.
 
 PowerSync keeps its on-device database across a sign-out. Before 2026-09-21 nothing cleared it, so
-the next account on a phone was shown the previous one's lists **and private My jobs** until enough
+the next account on a phone was shown the previous one's lists **and private To-Do jobs** until enough
 relaunches let its own sync replace them (Adam: "the old list remains, it takes several force
 closes"). `SyncRoot` now remembers the last account on the device and, when a **different** one
 signs in, calls `disconnectAndClear()` before anything reads the database — the rule
@@ -165,9 +165,26 @@ offline-first through PowerSync's local database, not through a cache, so it nee
 a `fetch` handler needs a versioning and update plan first**, tested against upgrading from the
 deployed build.
 
+### A job row is only ever built by `jobColumns()`.
+
+A job now has a time, a repeat and an alert as well as a date, and the database CHECKs the
+combinations: an hour-before alert needs a time, a reminder needs a date. **A write the database
+refuses is discarded by PowerSync without a word** (§27), so the job would look saved on one phone
+and exist nowhere else. `lib/jobs.ts` `jobColumns()` can never build such a row, and
+`scripts/verify-job-alerts.ts` holds it to the server's exact rules. Don't write a job table any
+other way.
+
+### A monthly job on the 31st falls on the last day of a short month. That is not what iOS does.
+
+Adam chose "use the last day" (2026-09-25); iOS skips the month. And the wanted date lives in the
+rule, so 31 Jan → 28 Feb → **31 Mar**, never drifting to the 28th. `scripts/verify-recurrence.ts`
+has a control that fails if either is "fixed". Ticking a recurring job moves the **same** job on
+from its **due date**, not from today (`TECHNICAL.md` §12).
+
 ### Reminders are push only, so Settings must tell the truth per device.
 
-There is no email fallback (Adam, 2026-09-21). A phone that is not on the Home Screen with
+Every job with its bell on is pushed until it is ticked done, **overdue included** (2026-09-25),
+at its own alert time (`TECHNICAL.md` §22). There is no email fallback (Adam, 2026-09-21). A phone that is not on the Home Screen with
 permission granted is simply not reminded, and the Reminders section says so rather than showing a
 button. A device reads "gets reminders" only when the **server** has its registration, never from
 the browser's own subscription alone (`TECHNICAL.md` §22).
@@ -183,7 +200,7 @@ npm run lint
 npm run deploy     # builds, then publishes dist/ to the gh-pages branch
 
 # The verify scripts (plain tsx, ✓/✗). Run them all, strictly:
-for f in scripts/verify-*.ts; do TZ=Europe/London npx tsx "$f" || echo "FAIL: $f"; done
+for f in scripts/verify*.ts; do TZ=Europe/London npx tsx "$f" || echo "FAIL: $f"; done
 ```
 
 > `npm run deploy` publishes the live site. Per this project's working rules it is **never** run

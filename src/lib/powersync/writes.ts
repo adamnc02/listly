@@ -2,7 +2,8 @@ import { powerSyncDb } from './database'
 import { appendPosition, midpoint, positionOf, toDbId, type Row } from './mapping'
 import { newId } from '../ids'
 import { todayIso } from '../date'
-import type { IsoDate, JobPage, ShopCompletionDraft } from '../../types'
+import type { IsoDate, JobDraft, JobPage, ShopCompletionDraft } from '../../types'
+import { jobColumns } from '../jobs'
 
 /**
  * One function per mutation, so the context stays thin.
@@ -222,32 +223,31 @@ export async function retryLedgerWrite(id: string): Promise<void> {
 
 // ── jobs ────────────────────────────────────────────────────────────────────
 
-export async function insertJob(
-  page: JobPage,
-  householdId: string,
-  text: string,
-  due: IsoDate,
-): Promise<string> {
+export async function insertJob(page: JobPage, householdId: string, draft: JobDraft): Promise<string> {
   const id = newId()
   const table = JOB_TABLE[page]
+  const c = jobColumns(draft)
   const pos = appendPosition(
     page === 'house'
       ? await siblings(`SELECT position FROM ${table} WHERE household_id = ?`, [householdId])
       : await siblings(`SELECT position FROM ${table}`, []),
   )
+  const cols = [c.text, c.due_date, c.due_time, c.repeat_rule, c.remind, c.alert_offset, c.alert_time, pos]
   if (page === 'house') {
     await powerSyncDb.execute(
-      `INSERT INTO ${table} (id, household_id, text, due_date, remind, done, done_at, position)
-       VALUES (?, ?, ?, ?, 0, 0, NULL, ?)`,
-      [id, householdId, text, toDbId(due), pos],
+      `INSERT INTO ${table} (id, household_id, text, due_date, due_time, repeat_rule, remind,
+                             alert_offset, alert_time, position, done, done_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL)`,
+      [id, householdId, ...cols],
     )
   } else {
     // my_jobs has no household_id: it is keyed on the login, and user_id is
     // set by the database's own default.
     await powerSyncDb.execute(
-      `INSERT INTO ${table} (id, text, due_date, remind, done, done_at, position)
-       VALUES (?, ?, ?, 0, 0, NULL, ?)`,
-      [id, text, toDbId(due), pos],
+      `INSERT INTO ${table} (id, text, due_date, due_time, repeat_rule, remind,
+                             alert_offset, alert_time, position, done, done_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL)`,
+      [id, ...cols],
     )
   }
   return id
@@ -270,18 +270,38 @@ export async function setJobRemind(page: JobPage, id: string, remind: boolean): 
   )
 }
 
-export async function saveJob(
-  page: JobPage,
-  id: string,
-  text: string,
-  due: IsoDate,
-  remind: boolean,
-): Promise<void> {
-  // Clearing the due date must clear `remind` in the SAME statement, or the
-  // row momentarily violates the CHECK and the write is discarded.
+export async function saveJob(page: JobPage, id: string, draft: JobDraft): Promise<void> {
+  // ONE statement, built by jobColumns(): clearing the due date clears
+  // remind, the time, the repeat and a timed alert in the SAME write, or the
+  // row momentarily violates a CHECK and the write is discarded (§27).
+  const c = jobColumns(draft)
   await powerSyncDb.execute(
-    `UPDATE ${JOB_TABLE[page]} SET text = ?, due_date = ?, remind = ? WHERE id = ?`,
-    [text, toDbId(due), due !== '' && remind ? 1 : 0, id],
+    `UPDATE ${JOB_TABLE[page]}
+        SET text = ?, due_date = ?, due_time = ?, repeat_rule = ?, remind = ?,
+            alert_offset = ?, alert_time = ?
+      WHERE id = ?`,
+    [c.text, c.due_date, c.due_time, c.repeat_rule, c.remind, c.alert_offset, c.alert_time, id],
+  )
+}
+
+/**
+ * Ticking a RECURRING job: the same row moves on to its next date (Q2). It
+ * never goes to Done, and it never becomes a new row — one identity, so two
+ * phones converge on it. Narrow: only the date changes.
+ */
+export async function advanceJob(page: JobPage, id: string, nextDue: IsoDate): Promise<void> {
+  await powerSyncDb.execute(`UPDATE ${JOB_TABLE[page]} SET due_date = ? WHERE id = ?`, [nextDue, id])
+}
+
+/**
+ * Deleting a RECURRING job ends the series (Q7: "deleting marks all upcoming
+ * as done, so there is nothing lingering"): it goes to Done with its repeat
+ * cleared, so nothing is left scheduled or alerting. A one-off is deleted.
+ */
+export async function endJobSeries(page: JobPage, id: string): Promise<void> {
+  await powerSyncDb.execute(
+    `UPDATE ${JOB_TABLE[page]} SET done = 1, done_at = ?, repeat_rule = NULL WHERE id = ?`,
+    [new Date().toISOString(), id],
   )
 }
 

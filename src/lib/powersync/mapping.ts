@@ -67,6 +67,12 @@ export function rowToJob(row: Row, page: JobPage): Job {
     due: fromDbId(row.due_date) as IsoDate,
     remind: bool(row.remind),
     done: bool(row.done),
+    // Recurrence and alerts (PROMPT-01, 2026-09-25). NULL ↔ '' like every
+    // other optional text column; '' means "none" or "the default".
+    dueTime: fromDbId(row.due_time),
+    repeat: fromDbId(row.repeat_rule),
+    alertOffset: fromDbId(row.alert_offset),
+    alertTime: fromDbId(row.alert_time),
   }
 }
 
