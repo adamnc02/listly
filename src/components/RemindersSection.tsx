@@ -103,8 +103,9 @@ export function RemindersSection() {
     <div className="reminders">
       <div className="lbl">Reminders</div>
       <p className="help">
-        A notification at <b>8am</b> each morning from three days before a job with its bell on is
-        due, until it’s ticked done. House jobs remind both of you; My jobs only you.
+        A job with its bell on sends a notification at <b>8am</b> every day from three days before it’s
+        due until it’s ticked done — or whenever you set in the job itself. House jobs remind both of
+        you; To-Do only you.
       </p>
 
       {state === null && <p className="help">Checking this {device}…</p>}

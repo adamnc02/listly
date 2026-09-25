@@ -65,7 +65,18 @@ export interface Job {
    *  and by a CHECK constraint in Phase 2 (PROMPT-01 §5.3). */
   remind: boolean
   done: boolean
+  /** 'HH:MM' London time, or '' for none. Only meaningful with a `due`. */
+  dueTime: string
+  /** A rule in src/lib/recurrence.ts's format, or '' for a one-off job. */
+  repeat: string
+  /** src/lib/alerts.ts: '' is the default (3 days before). */
+  alertOffset: string
+  /** 'HH:MM' for day/week offsets; '' is the default (08:00). */
+  alertTime: string
 }
+
+/** Everything the create/edit sheet saves in one go (TECHNICAL.md §12). */
+export type JobDraft = Pick<Job, 'text' | 'due' | 'dueTime' | 'repeat' | 'remind' | 'alertOffset' | 'alertTime'>
 
 /** `open` (expanded/collapsed) and dismissed banners are per-device UI
  *  state in localStorage, never synced — Adam, 2026-09-20, settling

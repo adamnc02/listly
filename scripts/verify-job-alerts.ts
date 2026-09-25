@@ -17,6 +17,7 @@
 import {
   alertSummary, DAY_OFFSETS, normaliseAlert, offsetLabel, TIME_OFFSETS,
 } from '../src/lib/alerts'
+import { jobColumns } from '../src/lib/jobs'
 
 let failed = 0
 const check = (name: string, ok: boolean, detail = '') => {
@@ -70,6 +71,31 @@ label('m5', '5 minutes before')
 label('h2', '2 hours before')
 label('m0', 'At the due time')
 label('d0', 'On the day')
+
+// ── the row that is actually written (jobColumns) ───────────────────────────
+// 🚨 Each of these is a row the database's CHECKs would refuse — and a
+// refused upload is discarded silently (§27).
+const base = { text: ' Bins ', due: '2026-10-06', dueTime: '', repeat: '', remind: true, alertOffset: '', alertTime: '' }
+{
+  const c = jobColumns({ ...base, due: '', dueTime: '18:00', repeat: 'D;1', alertOffset: 'h1' })
+  check('🚨 no due date → no time, no repeat, bell off, default alert (remind_needs_due)',
+    c.due_date === null && c.due_time === null && c.repeat_rule === null && c.remind === 0 && c.alert_offset === null,
+    JSON.stringify(c))
+}
+{
+  const c = jobColumns({ ...base, alertOffset: 'h1' })
+  check('🚨 an hour alert with no due time is not sent (timed_alert_needs_time)', c.alert_offset === null, JSON.stringify(c))
+}
+{
+  const c = jobColumns({ ...base, dueTime: '18:00', alertOffset: 'h1' })
+  check('an hour alert WITH a due time is kept', c.alert_offset === 'h1' && c.due_time === '18:00' && c.alert_time === null,
+    JSON.stringify(c))
+}
+check('a malformed time is dropped, not sent', jobColumns({ ...base, dueTime: '7pm' }).due_time === null)
+check('a malformed repeat is dropped (the job is a one-off)', jobColumns({ ...base, repeat: 'W;1' }).repeat_rule === null)
+check('a valid repeat is kept verbatim', jobColumns({ ...base, repeat: 'W;2;BYDAY=TU' }).repeat_rule === 'W;2;BYDAY=TU')
+check('the name is trimmed', jobColumns(base).text === 'Bins')
+check('the bell is carried as 0/1', jobColumns(base).remind === 1 && jobColumns({ ...base, remind: false }).remind === 0)
 
 if (failed) {
   console.log(`\nFAIL: ${failed} check(s) failed`)

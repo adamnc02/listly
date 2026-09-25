@@ -494,8 +494,7 @@ main {
 /* ---------- jobs ---------- */
 .jobform { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
 .jobform .line-input { width: 100%; font-size: 26px; }
-.due-lbl { display: flex; align-items: center; gap: 8px; flex: 1; font-size: 20px; color: var(--muted); }
-input[type=date] {
+input[type=date], input[type=time] {
   flex: 1; min-width: 0;
   height: 40px;
   border: 1.5px solid var(--line);
@@ -515,6 +514,9 @@ input[type=date] {
   padding: 4px 8px 4px 4px;
 }
 .jobtext .t { font-size: 26px; line-height: 1.1; }
+/* The row's small text: the repeat, and an alert that is not the default
+   (PROMPT-01 §A5). Chip-sized, muted, and never louder than the due chip. */
+.jobmeta { font-size: 18px; line-height: 1.15; color: var(--muted); }
 .chip { font-size: 18px; padding: 1px 10px; border-radius: 999px; background: var(--chip-bg); color: var(--brown-2); }
 .chip.soon { background: var(--chip-soon-bg); color: var(--chip-soon-ink); }
 .bell { color: var(--bell-off); }
@@ -728,6 +730,53 @@ nav button[aria-current=page] { background: var(--brown); color: #fff; }
   padding: 0 12px;
 }
 .actions { display: flex; align-items: center; gap: 10px; padding-top: 4px; }
+
+/* ---------- the job sheet (PROMPT-01 §A4) ---------- */
+/* One label + control(s) per line. Native <select> and time inputs on
+   purpose: on an iPhone they open the system wheel, which is the iOS
+   Calendar feel the Repeat screen is modelled on. */
+.formrow { display: flex; align-items: center; gap: 10px; min-height: 44px; }
+.formrow .lbl { min-width: 74px; }
+.formrow .unit { font-size: 22px; color: var(--soft); }
+.sheet select {
+  flex: 1; min-width: 0;
+  height: 44px;
+  border: 1.5px solid var(--line);
+  border-radius: 10px;
+  background: var(--ground);
+  color: var(--ink);
+  font: inherit;
+  font-size: 20px;
+  padding: 0 8px;
+}
+.btn.small { height: 44px; padding: 0 12px; font-size: 18px; }
+.summary-btn {
+  min-height: 44px;
+  text-align: left;
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  background: var(--sage-wash);
+  color: var(--ink);
+  font-size: 20px;
+  padding: 8px 12px;
+}
+.summary-btn .edit { color: var(--brown); font-weight: 700; margin-left: 6px; }
+/* The Custom screen's weekday, date and month grids. Every cell is a 44px
+   tap target; picked is --sage like every other "on" in the app. */
+.grid { display: grid; gap: 6px; }
+.grid7 { grid-template-columns: repeat(7, 1fr); }
+.grid4 { grid-template-columns: repeat(4, 1fr); }
+.grid button {
+  min-height: 44px;
+  min-width: 0;
+  border: 1.5px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 20px;
+  padding: 0;
+}
+.grid button[aria-pressed=true] { background: var(--sage); border-color: var(--sage); color: #fff; }
 .mrow {
   display: flex; align-items: center; gap: 6px;
   min-height: 52px;
