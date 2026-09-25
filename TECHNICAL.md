@@ -615,6 +615,9 @@ Each / On the… month grid, or the month grid + Days of week, with the live sen
 - **Entering a due date turns the bell on** (Q10). Clearing it turns the bell off and clears the
   time, the repeat and any timed alert.
 - **Hour and minute alerts are only offered once there is a time** (Q8).
+- **The date and the time each have a Clear button** whenever set. Most desktop browsers' native
+  date and time fields cannot be cleared at all (found in UAT, 2026-09-25), and clearing the date
+  is how a job stops being dated, repeating and reminded.
 - Save is `.waiting` until there is a name, and says so if tapped (§19).
 
 > 🚨 **Every job row is built by `jobColumns()` in `lib/jobs.ts`, and nothing else.** Each rule in
