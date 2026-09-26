@@ -616,13 +616,12 @@ Each / On the… month grid, or the month grid + Days of week, with the live sen
 - **Entering a due date turns the bell on** (Q10). Clearing it turns the bell off and clears the
   time, the repeat and any timed alert.
 - **Hour and minute alerts are only offered once there is a time** (Q8).
-- **Both time fields have a clock button** (Adam, 2026-09-25: Ella reads the 12-hour clock, Adam
-  prefers 24). It opens `TimeWheel` as a step of the same sheet — AM/PM at the top, an hour drum
-  (1–12) and a minute drum (00–59), with the 24-hour figure alone under them ("16:50") — and
-  **Set writes the 24-hour value into the field**, the only form stored. The drum is BLOC's rest-timer picker (`bloc-app` `buildPicker()`), ported, plus a
-  mouse wheel, arrow keys and tap-a-row. 🚨 12 AM is 00:xx and 12 PM is 12:xx:
-  `scripts/verify-time12.ts` round-trips every minute of the day. On an iPhone the native time
-  field opens iOS's own wheel, never a keyboard, so there is no keyboard type to set.
+- **Both time fields are the native `<input type="time">`, and nothing else** (Adam, 2026-09-26).
+  On an iPhone it opens iOS's own wheel, never a keyboard, and shows 12- or 24-hour by that
+  phone's Settings → General → Date & Time — so each person already gets the clock they read. It
+  always writes `'HH:MM'` 24-hour, the only form stored. 🚨 **Do not re-add a custom picker.** A
+  12-hour clock-button picker (`TimeWheel`, BLOC's rest-timer drum, ported) was built on 2026-09-25
+  and removed the next day as unnecessary; it lives in git history if ever wanted.
 - **The date and the time each have a Clear button** whenever set. Most desktop browsers' native
   date and time fields cannot be cleared at all (found in UAT, 2026-09-25), and clearing the date
   is how a job stops being dated, repeating and reminded.
