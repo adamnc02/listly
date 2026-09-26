@@ -766,51 +766,6 @@ nav button[aria-current=page] { background: var(--brown); color: #fff; }
 }
 .btn.small { height: 44px; padding: 0 12px; font-size: 18px; }
 
-/* ---------- the 12-hour time picker (TimeWheel.tsx) ----------
-   BLOC's rest-timer drum, in Listly's colours: three 56px rows showing, the
-   middle one chosen, a --line-2 rule either side of it, and the rows above
-   and below fading into --paper. 🚨 .drum's height is exactly three rows
-   (DRUM_H in TimeWheel.tsx) or the chosen row stops being centred. */
-.icon-btn.clock { color: var(--brown-2); border: 2px solid var(--line-2); }
-.ampm { justify-content: center; }
-.ampm button { min-width: 88px; }
-.drums { display: flex; justify-content: center; align-items: flex-end; gap: 4px; user-select: none; -webkit-user-select: none; }
-.drum-wrap { text-align: center; }
-.drum-label { font-size: 18px; color: var(--muted); margin-bottom: 4px; }
-.drum {
-  position: relative;
-  width: 104px;
-  height: 168px;
-  overflow: hidden;
-  cursor: ns-resize;
-  touch-action: none;
-  outline: none;
-  border-radius: 12px;
-}
-.drum:focus-visible { box-shadow: 0 0 0 2px var(--sage); }
-.drum-col { display: flex; flex-direction: column; align-items: center; will-change: transform; }
-.drum-col.settle { transition: transform .15s ease; }
-.drum-row {
-  height: 56px; line-height: 56px;
-  width: 104px;
-  flex-shrink: 0;
-  text-align: center;
-  font-size: 44px; font-weight: 700;
-  color: var(--ink);
-  font-variant-numeric: tabular-nums;
-}
-.drum-band {
-  position: absolute; left: 0; right: 0; top: 56px; height: 56px;
-  border-top: 2px solid var(--line-2); border-bottom: 2px solid var(--line-2);
-  pointer-events: none; z-index: 1;
-}
-.drum-fade {
-  position: absolute; inset: 0; z-index: 2; pointer-events: none;
-  background: linear-gradient(to bottom, var(--paper) 0%, rgba(255, 252, 247, 0) 35%,
-                                         rgba(255, 252, 247, 0) 65%, var(--paper) 100%);
-}
-.drum-colon { font-size: 44px; font-weight: 700; color: var(--muted); height: 168px; line-height: 168px; }
-.sheet .help.drum-readout { text-align: center; margin: 0; font-size: 22px; }
 .summary-btn {
   min-height: 44px;
   text-align: left;
