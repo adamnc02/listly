@@ -54,7 +54,7 @@
        which is the icon master.
      - The header is the logo (46px, 13px radius) and "Listly", with today's
        date underneath.
-     - The tab bar is three equal tabs, an icon above a label; the active tab
+     - The tab bar is equal tabs (three, or two in a household of one), an icon above a label; the active tab
        is filled --brown with white text.
    =========================================================================== */
 
@@ -587,7 +587,11 @@ nav {
   max-width: min(calc(100% - 24px), 720px);
   z-index: 100;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  /* One equal column per button, however many render — NOT repeat(3, …).
+     House jobs is hidden for a household of one (BottomNav), and a fixed
+     three left its slot as an empty third of the pill (UAT, 2026-09-26). */
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
   gap: 4px;
   padding: 5px;
   border-radius: 999px;

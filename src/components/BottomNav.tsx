@@ -2,7 +2,7 @@ import type { Tab } from '../App'
 import { Basket, CheckSquare, House } from './Icons'
 
 /**
- * Three equal tabs, icon above label, the active one filled brown with
+ * Equal tabs — three, or two in a household of one — icon above label, the active one filled brown with
  * white text — the tab-bar rule in src/index.css's header.
  *
  * No router: three tabs with no deep links, no back-button semantics worth
