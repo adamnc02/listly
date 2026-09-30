@@ -190,6 +190,14 @@ permission granted is simply not reminded, and the Reminders section says so rat
 button. A device reads "gets reminders" only when the **server** has its registration, never from
 the browser's own subscription alone (`TECHNICAL.md` §22).
 
+### One due-soon banner at a time, with a count, and its text is never white.
+
+Every open job due within 3 days or overdue is waiting for a banner, but only the soonest shows; a
+stack of them pushed the list off the screen. A red count on its top-right corner says how many are
+waiting, and ✕ brings up the next. The banner and the count both come from `dueSoonQueue()`, so
+they cannot disagree. The banner is a light red fill with a red border, and its text is the dark
+due-chip red: white on that fill is unreadable (`TECHNICAL.md` §13).
+
 ## Running it
 
 ```bash

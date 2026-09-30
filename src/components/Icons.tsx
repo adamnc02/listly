@@ -66,7 +66,7 @@ export const Close = () => (
 )
 
 export const Warn = () => (
-  <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+  <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <path d="M12 3 2.5 20h19L12 3z" />
     <path d="M12 10v4.5" />
     <path d="M12 17.5h.01" />

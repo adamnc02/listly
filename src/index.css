@@ -92,6 +92,9 @@
   --chip-bg: #F1E6D7;      /* normal due chip background (text: --brown-2) */
   --chip-soon-bg: #FBE6E3; /* due-within-3-days chip background */
   --chip-soon-ink: #9E2A21;/* …and its text */
+  --alert-bg: #F5CEC8;     /* due-soon banner fill: deeper than --chip-soon-bg,
+                             which is too close to --ground to read as a fill.
+                             --chip-soon-ink on it is 5.18:1 */
   --done-card: #EFE7DB;    /* the Done section's background */
   --done-item: #8C7C6E;    /* ticked shopping items */
   --done-job: #7E6E60;     /* done jobs, struck through */
@@ -229,18 +232,42 @@ header img {
 .alert {
   margin: 4px 16px 6px;
   padding: 14px 10px 14px 16px;
-  background: var(--red);
-  color: #fff;
+  /* A light red fill with a hard --red border. 🚨 The text is
+     --chip-soon-ink, never white: white on a light fill is unreadable, and
+     --chip-soon-ink on --alert-bg is 5.18:1. */
+  background: var(--alert-bg);
+  border: 1.5px solid var(--red);
+  color: var(--chip-soon-ink);
   border-radius: 16px;
   display: flex;
   align-items: center;
   gap: 12px;
   flex-shrink: 0;
-  box-shadow: 0 4px 12px rgba(179, 54, 44, .28);
+  box-shadow: 0 4px 12px rgba(179, 54, 44, .14);
 }
 .alert .t { font-size: 26px; font-weight: 700; line-height: 1.05; }
-.alert .w { font-size: 20px; opacity: .95; }
-.alert .icon-btn { background: rgba(255, 255, 255, .18); color: #fff; }
+.alert .w { font-size: 20px; }
+.alert .icon-btn { background: rgba(179, 54, 44, .12); color: var(--red); }
+/* One banner shows at a time; this is how many are waiting, the shown one
+   included, iOS-style over the top-right corner. The --ground ring is what
+   keeps the badge clear of the banner edge, and it sits above the ✕ rather
+   than over it, so it never takes the dismiss tap. */
+.alert { position: relative; }
+.alert-count {
+  position: absolute;
+  top: -9px; right: -7px;
+  min-width: 26px; height: 26px;
+  padding: 0 7px;
+  border-radius: 13px;
+  background: var(--red);
+  color: #fff;
+  font-size: 18px; font-weight: 700;
+  line-height: 26px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 0 0 2px var(--ground);
+  pointer-events: none;
+}
 
 /* ---------- shared bits ---------- */
 .grow { flex: 1; min-width: 0; }
@@ -386,8 +413,8 @@ main {
    colour, which is what --accent is in each of those apps.
 
    Only the LOOK is shared. Both of those drive the drag with HTML5
-   drag-and-drop, which does not fire from touch on iPhone Safari; Listly uses
-   Pointer Events instead. See src/lib/useDragReorder.ts. */
+   drag-and-drop; Listly uses Pointer Events, one implementation for touch,
+   pen and mouse. See src/lib/useDragReorder.ts. */
 .row.dragging { opacity: .35; }
 .row.dragging .grip { cursor: grabbing; }
 

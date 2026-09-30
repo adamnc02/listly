@@ -75,7 +75,7 @@ src/
     ManageListsSheet.tsx  Every list, hidden ones included
     ItemEditSheet.tsx     Rename / delete / move an item
     JobEditSheet.tsx      Edit a job
-    DueSoonBanners.tsx    The red banners, on every tab
+    DueSoonBanners.tsx    The due-soon banner and its count, on every tab
     LedgerErrors.tsx      "Couldn't add to the ledger — tap to retry"
     AccountModal.tsx      Identity, link code, delete my app data
     RemindersSection.tsx  Per-device reminder state, devices, the test button (§22)
@@ -110,7 +110,7 @@ scripts/
 
 ## 2. The app shell
 
-`App.tsx`'s `Shell` is: a header (logo, wordmark, sync dot, account button), the due-soon banners,
+`App.tsx`'s `Shell` is: a header (logo, wordmark, sync dot, account button), the due-soon banner,
 a `.main-wrap` holding `<main>` plus its two edge fades, the bottom nav, and the account sheet.
 
 **The banners sit in the shell, not on the jobs pages,** because they show on **every** tab — a job
@@ -171,7 +171,8 @@ so there is no second theme to define. That is *why* these particular colours si
 come off that tile will look wrong beside them.
 
 Cream ground `#F5EFE6`, paper `#FFFCF7`, ink `#3B2F26`, a brown accent `#8A5E34`, a sage accent
-`#6F8C5E`, and one red `#B3362C` for overdue and error states, plus chip, done and grip tints.
+`#6F8C5E`, and one red `#B3362C` for overdue and error states, plus chip, done and grip tints and
+the due-soon banner's fill `--alert-bg`.
 **Every token in `index.css` now carries what it is FOR**, which matters as much as the hex:
 `--muted`, `--soft` and `--brown-2` are near-neighbours that collapse into each other the moment
 someone picks one by eye instead of by role.
@@ -659,12 +660,30 @@ the reminder job only ever sees the date that results.
 ## 13. Module: Due-soon banners
 
 `components/DueSoonBanners.tsx`. Every **open** job on either page that is due within 3 days or
-overdue gets a red banner, on **every tab** (except House jobs' in a household of one, whose tab
-is hidden, §12).
+overdue is in the due-soon queue, on **every tab** (except House jobs' in a household of one, whose
+tab is hidden, §12).
 
-> It is deliberately separate from the reminder bell. **A job gets a banner whether or not its
+> It is deliberately separate from the reminder bell. **A job is in the queue whether or not its
 > reminder is on.** The bell is "tell me when I'm not looking at the app"; the banner is "you are
 > looking at the app, and this needs you."
+
+**One banner shows at a time**, the head of the queue: soonest first, so an overdue job is never
+hidden behind one due in three days. A stack of full-size banners pushed the list off a phone
+screen. When more than one job is waiting, **a red count** (`.alert-count`) sits over the banner's
+top-right corner, iOS-style, the same idiom as BLOC's coach banners: it counts the whole queue,
+the shown job included, sits above the ✕ rather than over it, and takes no taps. **✕ dismisses the
+shown job and brings up the next**, so the count drops by one; at one left the count goes.
+
+`lib/jobs.ts` `dueSoonQueue()` is the **single source** for both the banner and the count, so they
+cannot disagree: a count that included a job the banner would never show would leave ✕ with
+nothing to reveal. `scripts/verify-due-soon-banners.ts` covers the order, the count, ✕ bringing up
+the next, and the household-of-one filter, with a control proving list order is not the answer.
+
+**The look:** a light red fill (`--alert-bg`, `#F5CEC8`) with a 1.5px `--red` border, the same
+shape as the ledger-error card (§14). 🚨 **The text and the warning icon are `--chip-soon-ink`,
+never white.** White on a light fill is unreadable (1.2:1); `--chip-soon-ink` on `--alert-bg` is
+5.18:1. The fill is deliberately deeper than `--chip-soon-bg`: that one is 1.05:1 against
+`--ground`, and a banner filled with it reads as unfilled. The `Warn` icon strokes `currentColor`.
 
 Dismissal is per device and lasts for the day (§6). Editing and saving the job re-arms it.
 
@@ -764,10 +783,10 @@ mirrors theirs: 3px tall, 2px radius, accent colour, with a 2px surface-coloured
 separates cleanly from whatever it sits between.
 
 **What is deliberately NOT copied.** Both of those apps drive the drag with **HTML5
-drag-and-drop** (`draggable="true"` + `ondragstart`/`ondragover`) and no touch shim. Those events
-**do not fire from touch on iPhone Safari**, so that mechanism cannot work on the device Listly is
-built for. **Pointer Events** are used instead — one implementation covering touch, pen and mouse —
-with `setPointerCapture` so the gesture survives the finger sliding outside the row it started on.
+drag-and-drop** (`draggable="true"` + `ondragstart`/`ondragover`) and no touch shim, which works on
+iPhone. Listly uses **Pointer Events** instead, for one implementation covering touch, pen and mouse,
+with `setPointerCapture` so the gesture survives the finger sliding outside the row it started on
+and a long-press start that still lets the list scroll.
 
 **The gesture:**
 
@@ -921,6 +940,7 @@ that reason (`lib/shopConfirmation.ts`, `pushState.ts`, `syncHealth.ts`, `accoun
 | `verify-push-state.ts` | a device reads "gets reminders" only with a server row (§22) |
 | `verify-sync-health.ts` | the dot and the panel's one answer; a stale upload error is not a failure (§18) |
 | `verify-account-switch.ts` | a different account clears the device; Sync now waits for both directions (§18) |
+| `verify-due-soon-banners.ts` | one banner at a time, soonest first, and a count that matches what ✕ can reveal (§13) |
 
 **UI changes are checked by rendering the real components**, not by reading them: a throwaway Vite
 harness in the scratch directory mounts the component with its data layer mocked (aliased by
