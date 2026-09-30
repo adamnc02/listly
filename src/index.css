@@ -92,6 +92,9 @@
   --chip-bg: #F1E6D7;      /* normal due chip background (text: --brown-2) */
   --chip-soon-bg: #FBE6E3; /* due-within-3-days chip background */
   --chip-soon-ink: #9E2A21;/* …and its text */
+  --alert-bg: #F5CEC8;     /* due-soon banner fill: deeper than --chip-soon-bg,
+                             which is too close to --ground to read as a fill.
+                             --chip-soon-ink on it is 5.18:1 */
   --done-card: #EFE7DB;    /* the Done section's background */
   --done-item: #8C7C6E;    /* ticked shopping items */
   --done-job: #7E6E60;     /* done jobs, struck through */
@@ -229,10 +232,10 @@ header img {
 .alert {
   margin: 4px 16px 6px;
   padding: 14px 10px 14px 16px;
-  /* The due chip's light red pair, with a hard --red border: the same look
-     as the ledger-error card. 🚨 The text is --chip-soon-ink, never white —
-     white on --chip-soon-bg is 1.2:1 and unreadable; this pair is 6.25:1. */
-  background: var(--chip-soon-bg);
+  /* A light red fill with a hard --red border. 🚨 The text is
+     --chip-soon-ink, never white: white on a light fill is unreadable, and
+     --chip-soon-ink on --alert-bg is 5.18:1. */
+  background: var(--alert-bg);
   border: 1.5px solid var(--red);
   color: var(--chip-soon-ink);
   border-radius: 16px;
