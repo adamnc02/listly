@@ -32,6 +32,24 @@ export function isDueSoon(iso: IsoDate): boolean {
   return iso !== '' && daysUntil(iso) <= 3
 }
 
+/**
+ * The due-soon banner queue, soonest first (TECHNICAL.md §13): every open
+ * job due within 3 days or overdue, minus the ones this device dismissed
+ * today, minus House jobs when that tab is hidden. The banner shows the head
+ * of this queue and counts its length; ✕ removes the head, which is what
+ * shows the next one.
+ */
+export function dueSoonQueue(
+  jobs: readonly Job[],
+  isDismissed: (jobId: string) => boolean,
+  houseHidden: boolean,
+): Job[] {
+  return jobs
+    .filter((j) => !j.done && j.due && isDueSoon(j.due) && !isDismissed(j.id))
+    .filter((j) => !(houseHidden && j.page === 'house'))
+    .sort((a, b) => (a.due < b.due ? -1 : a.due > b.due ? 1 : 0))
+}
+
 function pretty(iso: IsoDate): string {
   return parseLocalDate(iso).toLocaleDateString('en-GB', {
     weekday: 'short',

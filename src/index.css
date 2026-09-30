@@ -241,6 +241,26 @@ header img {
 .alert .t { font-size: 26px; font-weight: 700; line-height: 1.05; }
 .alert .w { font-size: 20px; opacity: .95; }
 .alert .icon-btn { background: rgba(255, 255, 255, .18); color: #fff; }
+/* One banner shows at a time; this is how many are waiting, the shown one
+   included, iOS-style over the top-right corner. The --ground ring is what
+   separates a red badge from a red banner, and it sits above the ✕ rather
+   than over it, so it never takes the dismiss tap. */
+.alert { position: relative; }
+.alert-count {
+  position: absolute;
+  top: -9px; right: -7px;
+  min-width: 26px; height: 26px;
+  padding: 0 7px;
+  border-radius: 13px;
+  background: var(--red);
+  color: #fff;
+  font-size: 18px; font-weight: 700;
+  line-height: 26px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 0 0 2px var(--ground);
+  pointer-events: none;
+}
 
 /* ---------- shared bits ---------- */
 .grow { flex: 1; min-width: 0; }
