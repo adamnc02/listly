@@ -229,21 +229,25 @@ header img {
 .alert {
   margin: 4px 16px 6px;
   padding: 14px 10px 14px 16px;
-  background: var(--red);
-  color: #fff;
+  /* The due chip's light red pair, with a hard --red border: the same look
+     as the ledger-error card. 🚨 The text is --chip-soon-ink, never white —
+     white on --chip-soon-bg is 1.2:1 and unreadable; this pair is 6.25:1. */
+  background: var(--chip-soon-bg);
+  border: 1.5px solid var(--red);
+  color: var(--chip-soon-ink);
   border-radius: 16px;
   display: flex;
   align-items: center;
   gap: 12px;
   flex-shrink: 0;
-  box-shadow: 0 4px 12px rgba(179, 54, 44, .28);
+  box-shadow: 0 4px 12px rgba(179, 54, 44, .14);
 }
 .alert .t { font-size: 26px; font-weight: 700; line-height: 1.05; }
-.alert .w { font-size: 20px; opacity: .95; }
-.alert .icon-btn { background: rgba(255, 255, 255, .18); color: #fff; }
+.alert .w { font-size: 20px; }
+.alert .icon-btn { background: rgba(179, 54, 44, .12); color: var(--red); }
 /* One banner shows at a time; this is how many are waiting, the shown one
    included, iOS-style over the top-right corner. The --ground ring is what
-   separates a red badge from a red banner, and it sits above the ✕ rather
+   keeps the badge clear of the banner edge, and it sits above the ✕ rather
    than over it, so it never takes the dismiss tap. */
 .alert { position: relative; }
 .alert-count {
