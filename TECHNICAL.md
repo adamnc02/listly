@@ -764,10 +764,10 @@ mirrors theirs: 3px tall, 2px radius, accent colour, with a 2px surface-coloured
 separates cleanly from whatever it sits between.
 
 **What is deliberately NOT copied.** Both of those apps drive the drag with **HTML5
-drag-and-drop** (`draggable="true"` + `ondragstart`/`ondragover`) and no touch shim. Those events
-**do not fire from touch on iPhone Safari**, so that mechanism cannot work on the device Listly is
-built for. **Pointer Events** are used instead — one implementation covering touch, pen and mouse —
-with `setPointerCapture` so the gesture survives the finger sliding outside the row it started on.
+drag-and-drop** (`draggable="true"` + `ondragstart`/`ondragover`) and no touch shim, which works on
+iPhone. Listly uses **Pointer Events** instead, for one implementation covering touch, pen and mouse,
+with `setPointerCapture` so the gesture survives the finger sliding outside the row it started on
+and a long-press start that still lets the list scroll.
 
 **The gesture:**
 

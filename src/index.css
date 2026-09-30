@@ -406,8 +406,8 @@ main {
    colour, which is what --accent is in each of those apps.
 
    Only the LOOK is shared. Both of those drive the drag with HTML5
-   drag-and-drop, which does not fire from touch on iPhone Safari; Listly uses
-   Pointer Events instead. See src/lib/useDragReorder.ts. */
+   drag-and-drop; Listly uses Pointer Events, one implementation for touch,
+   pen and mouse. See src/lib/useDragReorder.ts. */
 .row.dragging { opacity: .35; }
 .row.dragging .grip { cursor: grabbing; }
 

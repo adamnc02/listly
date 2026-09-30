@@ -16,11 +16,9 @@ import { useCallback, useRef, useState } from 'react'
  * ── What is deliberately NOT copied ────────────────────────────────────
  * Both of those apps drive the drag with **HTML5 drag-and-drop**
  * (`draggable="true"` + `ondragstart`/`ondragover`) and no touch shim.
- * Those events do not fire from touch on iPhone Safari, so that mechanism
- * cannot work on the device Listly is built for (APP-KNOWLEDGE: iOS only).
- * Pointer Events are used instead — one implementation covering touch, pen
- * and mouse — with `setPointerCapture` so the gesture survives the finger
- * sliding outside the row it started on.
+ * That works on iPhone too. Listly uses Pointer Events instead, for one
+ * implementation covering touch, pen and mouse, with `setPointerCapture` so
+ * the gesture survives the finger sliding outside the row it started on.
  *
  * ── The gesture ────────────────────────────────────────────────────────
  *   - press and hold the grip for LONG_PRESS_MS -> the row fades and the
