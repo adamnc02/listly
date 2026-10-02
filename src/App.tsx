@@ -14,7 +14,7 @@ import icon from '/apple-touch-icon.png'
 
 export type { Tab } from './lib/openIntent'
 import type { Tab } from './lib/openIntent'
-import { parseOpen, takePendingOpen } from './lib/openIntent'
+import { jobOpenUrl, parseOpen, takePendingOpen } from './lib/openIntent'
 
 /**
  * The app shell: header, due-soon banners, the current tab, the tab bar.
@@ -40,12 +40,14 @@ function Shell() {
   // Where a tapped notification wants to land (src/lib/openIntent.ts). Three
   // ways it can arrive — the URL, the worker's message, the worker's note —
   // because on an iPhone any one of them can be lost.
+  // A tapped due-soon banner goes through it too, so a banner and a
+  // notification for the same job land in the same place.
+  const apply = (url: string) => {
+    const o = parseOpen(url, window.location.href)
+    if (o.tab) setTab(o.tab)
+    if (o.jobId) setFlash((f) => ({ id: o.jobId!, n: (f?.n ?? 0) + 1 }))
+  }
   useEffect(() => {
-    const apply = (url: string) => {
-      const o = parseOpen(url, window.location.href)
-      if (o.tab) setTab(o.tab)
-      if (o.jobId) setFlash((f) => ({ id: o.jobId!, n: (f?.n ?? 0) + 1 }))
-    }
     const fromNote = () => {
       void takePendingOpen().then((url) => url && apply(url))
     }
@@ -107,7 +109,7 @@ function Shell() {
         </button>
       </header>
 
-      <DueSoonBanners />
+      <DueSoonBanners onOpen={(job) => apply(jobOpenUrl(job))} />
 
       {/* The fades are siblings of <main> inside its own wrapper, not
           children of .app: anchored to .app, a top fade would sit over the

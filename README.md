@@ -209,6 +209,10 @@ waiting, and ✕ brings up the next. The banner and the count both come from `du
 they cannot disagree. The banner is a light red fill with a red border, and its text is the dark
 due-chip red: white on that fill is unreadable (`TECHNICAL.md` §13).
 
+**Tapping the banner opens its job and flashes the row**, through the same path as tapping the
+job's reminder notification. It does not dismiss the banner; only ✕ does, and ✕ must keep
+stopping its tap from reaching the banner, or every dismiss also jumps tabs.
+
 ## Running it
 
 ```bash

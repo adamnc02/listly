@@ -248,6 +248,16 @@ header img {
 .alert .t { font-size: 26px; font-weight: 700; line-height: 1.05; }
 .alert .w { font-size: 20px; }
 .alert .icon-btn { background: rgba(179, 54, 44, .12); color: var(--red); }
+/* The whole banner opens its job (TECHNICAL.md §13); ✕ is the one part that
+   does not. The text is a real button for keyboards and screen readers, so it
+   is reset to look like the plain text it replaced. */
+.alert { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.alert:active { filter: brightness(.96); }
+.alert-open {
+  border: none; background: none; padding: 0; margin: 0;
+  font: inherit; color: inherit; text-align: left;
+}
+.alert-open > span { display: block; }
 /* One banner shows at a time; this is how many are waiting, the shown one
    included, iOS-style over the top-right corner. The --ground ring is what
    keeps the badge clear of the banner edge, and it sits above the ✕ rather
