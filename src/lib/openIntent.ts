@@ -50,6 +50,15 @@ export function parseOpen(url: string, base = 'https://x/listly/'): OpenIntent {
 }
 
 /**
+ * The destination a tapped due-soon banner opens (TECHNICAL.md §13): the same
+ * `?tab=…&job=…` a job reminder's notification carries, so the banner and the
+ * notification land and flash through one path, `parseOpen()`.
+ */
+export function jobOpenUrl(job: { id: string; page: JobPage }): string {
+  return `?tab=${job.page}&job=${encodeURIComponent(job.id)}`
+}
+
+/**
  * The job id inside a job reminder's tag ('house_jobs:<id>:…' or
  * 'my_jobs:<id>:…'), or null for anything else. public/sw.js carries a copy
  * of this one regex — plain JS, it cannot import — and

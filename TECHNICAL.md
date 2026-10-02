@@ -714,6 +714,21 @@ never white.** White on a light fill is unreadable (1.2:1); `--chip-soon-ink` on
 
 Dismissal is per device and lasts for the day (§6). Editing and saving the job re-arms it.
 
+**Tapping the banner opens its job**: the job's tab, scrolled to the row, which flashes — exactly
+what tapping that job's reminder notification does (§22). The banner builds the notification's
+own `?tab=…&job=…` (`lib/openIntent.ts` `jobOpenUrl()`) and `App.tsx` hands it to the same
+`apply()` → `parseOpen()` the notification goes through, so the two cannot land in different
+places. The whole banner takes the tap — padding and icon included — and its text is a real
+`<button>` (`.alert-open`, reset to look like plain text) so a keyboard or screen reader can reach
+it. **Opening does not dismiss**: looking at a job is not dealing with it, so the banner stays
+until the job is ticked or ✕ is tapped.
+
+> 🚨 **✕ sits inside the tappable banner, so its handler calls `stopPropagation()` before
+> `dismissBanner()`.** Without it every dismiss would also jump to the job's tab.
+> `scripts/verify-banner-opens-job.ts` holds both halves, with a control that strips the
+> `stopPropagation()`, and round-trips 2,000 real `newId()` ids through `parseOpen()` — an id it
+> refused would open the tab and flash nothing, silently.
+
 ---
 
 ## 14. Module: Ledger errors
@@ -968,6 +983,7 @@ that reason (`lib/shopConfirmation.ts`, `pushState.ts`, `syncHealth.ts`, `accoun
 | `verify-sync-health.ts` | the dot and the panel's one answer; a stale upload error is not a failure (§18) |
 | `verify-account-switch.ts` | a different account clears the device; Sync now waits for both directions (§18) |
 | `verify-due-soon-banners.ts` | one banner at a time, soonest first, and a count that matches what ✕ can reveal (§13) |
+| `verify-banner-opens-job.ts` | a tapped banner opens its job's tab and flashes it through the notification's path, and ✕ only dismisses (§13) |
 
 **UI changes are checked by rendering the real components**, not by reading them: a throwaway Vite
 harness in the scratch directory mounts the component with its data layer mocked (aliased by
@@ -1041,7 +1057,8 @@ A House job reminds **both** household members; a To-Do job only its owner.
   window (missed by a suspended page), and **a note in Cache Storage** that the app reads and
   deletes on start and whenever it comes to the front. The note is a notepad, not a page cache:
   there is still **no fetch handler** (`verify-open-intent.ts` asserts it).
-- The row pulses three times (`.row.flash`); reduced motion gets a steady highlight. A done or
+- The row pulses three times (`.row.flash`); reduced motion gets a steady highlight. A tapped
+  due-soon banner lands and flashes through this same path (§13). A done or
   deleted job is simply not found. Shopping notifications open Shopping and flash nothing.
 - An already-open window is reused, because a second one would fight the first for PowerSync's
   database.
