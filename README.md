@@ -134,6 +134,17 @@ never comes. `html`, `body`, `.app` and the nav are all sized from one JS-measur
 It is also a pill inset 12px each side, because a full-bleed bar's corners collide with the phone's
 own rounded screen corners.
 
+**It disappears while the keyboard is up**, along with the fade it floats in — every list has an
+"Add an item…" field, so otherwise the pill covers the bottom of the list for most of a shop. Being
+`absolute` is what makes that free: hiding it moves nothing else.
+
+One thing to know before changing it: the keyboard is detected by
+`visualViewport.height < screen.height * 0.75`, **not** by comparing `innerHeight` against the
+visual viewport, because in iOS standalone `innerHeight` shrinks with the keyboard too and that
+comparison is always ~0. There is one copy of that predicate, in `index.html`, and `--app-height`
+depends on it as well. It is iOS-standalone only, so nothing changes in a browser tab — which also
+means this is invisible on the dev server.
+
 ### A control with nothing to do says so BEFORE it is tapped.
 
 Every "add"-style control, and Finish shop, renders at `.waiting` opacity while there is nothing to
