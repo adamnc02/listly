@@ -87,10 +87,26 @@
           nav.style.bottom = Math.max(measureEnv('safe-area-inset-bottom') - 6, 8) + 'px'
         }
 
+        // 🚨 Keyboard up → hide the floating nav. This is the ONLY place that
+        // decides it, and it reuses isKeyboardOpen() above rather than adding a
+        // second detector: that predicate's screen.height * 0.75 rule is not
+        // obvious — in iOS standalone window.innerHeight shrinks WITH the
+        // keyboard, so the usual innerHeight - visualViewport.height test reads
+        // ~0 and never fires — and two copies of it would drift apart.
+        //
+        // An attribute on <html> is all the CSS needs, so React is not involved
+        // at all and no re-render can fight it. Nothing is measured or moved:
+        // the pill is already out of the flow, so hiding it reflows nothing.
+        function reflectKeyboard() {
+          if (isKeyboardOpen()) document.documentElement.setAttribute('data-keyboard', 'open')
+          else document.documentElement.removeAttribute('data-keyboard')
+        }
+
         function measureAll() {
           setAppHeight()
           setSafeAreaVars()
           positionNavDirect()
+          reflectKeyboard()
         }
 
         document.addEventListener('DOMContentLoaded', function () {
@@ -114,8 +130,8 @@
         }
       })()
     </script>
-    <script type="module" crossorigin src="/listly/assets/index-C8sTOb7P.js"></script>
-    <link rel="stylesheet" crossorigin href="/listly/assets/index-BplpsHOH.css">
+    <script type="module" crossorigin src="/listly/assets/index-Dg_xGv_J.js"></script>
+    <link rel="stylesheet" crossorigin href="/listly/assets/index-B_Wm0mVF.css">
   </head>
   <body>
     <div id="root"></div>
