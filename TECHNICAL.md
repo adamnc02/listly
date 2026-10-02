@@ -155,6 +155,33 @@ set in `index.html`. The nav is a pill inset 12px each side, because a full-blee
 collide with the phone's own rounded screen corners; `--nav-h` lets `<main>` reserve room for it
 once it leaves the flow.
 
+### The nav hides while the keyboard is up
+
+Every list has an "Add an item…" field, so the keyboard is open for most of a shop, and the pill
+sits over the bottom of the list. `index.html`'s `reflectKeyboard()` writes `data-keyboard="open"`
+on `<html>`, and one CSS rule hides the pill and the bottom edge fade. Being `absolute` is what
+makes it free: hiding it reflows nothing, so the row the keyboard did not cover does not move.
+
+**It reuses `isKeyboardOpen()`, the predicate `setAppHeight()` already trusts, and there must only
+ever be one copy.** 🚨 **In iOS standalone `window.innerHeight` shrinks WITH the keyboard**, so the
+obvious `innerHeight - visualViewport.height > 150` test reads ~0 and never fires. The real test is
+`visualViewport.height < screen.height * 0.75`, because `screen.height` is the physical screen and
+never changes. Anyone adding keyboard handling elsewhere will reach for the obvious version and get
+a detector that is silently always false.
+
+It is gated on `navigator.standalone`, so **nothing changes in a desktop browser or a Safari tab** —
+there is no on-screen keyboard there to clear. That also means **it cannot be seen on the dev
+server**; the pill hides on an installed iPhone and nowhere else. Android is out of scope (§1).
+
+`<main>`'s bottom padding is deliberately left alone. It reserves the pill's room inside the scroll
+area, and dropping it mid-typing reflows the list under the user's finger; while the keyboard is up
+it is simply extra scroll room. The bottom fade goes with the pill because it is sized to the strip
+the pill floats over — left behind, it would hold a 90px gradient over the text being typed.
+
+`scripts/verify-keyboard-hides-nav.ts` extracts the real predicate out of `index.html` and runs it
+against fake viewports, including the case the obvious detector gets wrong, with that detector as
+the control.
+
 ---
 
 ## 3. Design tokens and the stacking contract

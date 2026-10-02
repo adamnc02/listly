@@ -639,6 +639,28 @@ nav button {
   gap: 3px;
 }
 nav button[aria-current=page] { background: var(--brown); color: #fff; }
+
+/* ---------- keyboard up: the pill gets out of the way ----------
+   index.html's isKeyboardOpen() writes data-keyboard="open" on <html>. The
+   pill is `absolute`, so hiding it reflows nothing — the row the keyboard did
+   not cover stays exactly where it was.
+
+   iOS standalone only, because that predicate is gated on
+   navigator.standalone — which is the one mode this app runs in (Android is
+   out of scope; README, "What Listly is"). In a desktop browser or a Safari
+   tab there is no on-screen keyboard to clear, so nothing changes, and that is
+   also why this cannot be seen on the dev server.
+
+   The bottom fade goes with it. It is sized to the strip the pill floats over
+   (--nav-h tall), so leaving it behind would hold a 90px gradient over the
+   text being typed, with no pill under it to justify the fade.
+
+   🚨 <main>'s bottom padding is deliberately NOT reduced here. It reserves the
+   pill's room inside the scroll area, and dropping it mid-typing reflows the
+   list under the user's finger. While the keyboard is up it is simply extra
+   scroll room at the bottom. */
+html[data-keyboard='open'] nav,
+html[data-keyboard='open'] .edge-fade-bottom { display: none; }
 /* The pill already floats above the home indicator, so the error banner
    clears the pill rather than the old full-bleed bar's height. */
 
