@@ -76,10 +76,22 @@ export interface Job {
   /** When it was ticked done (an ISO timestamp), or '' while open. Orders
    *  the Done sheet, newest first. */
   doneAt: string
+  /** The `JobCategory` it is filed under, or '' for "Other". An id that
+   *  names no category (deleted on another phone) also reads as Other. */
+  categoryId: string
+}
+
+/** A House jobs or To-Do category (TECHNICAL.md §12). Each page has its own:
+ *  `house_job_categories` is shared with the household, `my_job_categories`
+ *  is private to the login, exactly like the two job tables. */
+export interface JobCategory {
+  id: string
+  page: JobPage
+  name: string
 }
 
 /** Everything the create/edit sheet saves in one go (TECHNICAL.md §12). */
-export type JobDraft = Pick<Job, 'text' | 'due' | 'dueTime' | 'repeat' | 'remind' | 'alertOffset' | 'alertTime'>
+export type JobDraft = Pick<Job, 'text' | 'due' | 'dueTime' | 'repeat' | 'remind' | 'alertOffset' | 'alertTime' | 'categoryId'>
 
 /** `open` (expanded/collapsed) and dismissed banners are per-device UI
  *  state in localStorage, never synced — Adam, 2026-09-20, settling
@@ -88,6 +100,9 @@ export type JobDraft = Pick<Job, 'text' | 'due' | 'dueTime' | 'repeat' | 'remind
 export interface DeviceState {
   openLists: Record<string, boolean>
   dismissedBanners: Record<string, IsoDate>
+  /** Job categories collapsed ON THIS PHONE, keyed by category id, or
+   *  `other:<page>` for the Other group. Absent means open. */
+  collapsedCategories: Record<string, true>
 }
 
 /**

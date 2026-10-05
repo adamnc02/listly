@@ -538,6 +538,13 @@ main {
 .empty { text-align: center; padding: 24px 12px; font-size: 24px; color: var(--muted); }
 
 /* ---------- jobs ---------- */
+/* Job categories are cards in the shopping-list design (.listhead,
+   .listtoggle, .listbody). Other, and every dated job, has no grip; the
+   spacer keeps names in one column with the rows that do. */
+.grip-space { width: 22px; flex-shrink: 0; }
+.listhead > .grip-space { width: 30px; }
+.subhead { display: flex; justify-content: flex-end; padding: 0 4px; margin-top: -6px; }
+.jobcat .listbody { padding-top: 4px; }
 .jobform { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
 .jobform .line-input { width: 100%; font-size: 26px; }
 input[type=date], input[type=time] {
@@ -880,6 +887,18 @@ html[data-keyboard='open'] .edge-fade-bottom { display: none; }
 }
 .mrow .nm { font-size: 26px; font-weight: 700; line-height: 1.1; }
 .mrow .st { font-size: 18px; color: var(--muted); }
+/* A category's name, renamed in place (ManageCategoriesSheet): reads as the
+   .nm text until tapped, then shows the field's underline. */
+.nm-input {
+  width: 100%; min-width: 0;
+  min-height: 44px;
+  border: none; border-bottom: 2px solid transparent;
+  background: transparent;
+  font: inherit; font-size: 26px; font-weight: 700; line-height: 1.1; color: var(--ink);
+  padding: 0;
+  outline: none;
+}
+.nm-input:focus { border-bottom-color: var(--line-2); }
 .star { color: var(--grip); }
 .star[aria-pressed=true] { color: var(--brown); }
 .del { color: var(--red); }

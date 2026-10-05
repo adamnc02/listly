@@ -61,6 +61,10 @@ const P = { position: 'real' } as const
 const JOB = {
   text: 'text', due_date: 'text', remind: 'bool', done: 'bool', done_at: 'text', ...P,
   due_time: 'text', repeat_rule: 'text', alert_offset: 'text', alert_time: 'text',
+  // 20261005090000. Names a row in its page's category table, or null for
+  // "Other". NO foreign key: a database guard nulls a category the job may
+  // not use, so a job filed offline under a deleted category is not lost.
+  category_id: 'text',
 } as const
 
 function own(remote: string, columns: Record<string, ColumnKind>, household = true): SyncedTable {
@@ -91,7 +95,13 @@ export const SYNCED_TABLES: SyncedTable[] = [
     ...P,
   }),
   own('shopping_items', { ...H, list_id: 'text', text: 'text', done: 'bool', ...P }),
+  // Categories BEFORE their jobs. The database guard nulls a job's category
+  // if the category is not there yet, so a new category must upload first —
+  // which, since uploads go in local write order, means the app writes it
+  // first (writes.ts insertJobCategory, awaited before the job).
+  own('house_job_categories', { ...H, name: 'text', ...P }),
   own('house_jobs', { ...H, ...JOB }),
+  own('my_job_categories', { name: 'text', ...P }, false),
   // No household_id: my_jobs is private to one login, and that is enforced by
   // the column default, the RLS policy and the stream predicate independently.
   own('my_jobs', { ...JOB }, false),

@@ -19,6 +19,7 @@ import { jobColumns } from '../jobs'
  */
 
 const JOB_TABLE: Record<JobPage, string> = { house: 'lst_house_jobs', mine: 'lst_my_jobs' }
+const CATEGORY_TABLE: Record<JobPage, string> = { house: 'lst_house_job_categories', mine: 'lst_my_job_categories' }
 
 async function siblings(sql: string, params: unknown[]): Promise<Array<number | null>> {
   const rows = await powerSyncDb.getAll<Row>(sql, params)
@@ -272,12 +273,12 @@ export async function insertJob(page: JobPage, householdId: string, draft: JobDr
       ? await siblings(`SELECT position FROM ${table} WHERE household_id = ?`, [householdId])
       : await siblings(`SELECT position FROM ${table}`, []),
   )
-  const cols = [c.text, c.due_date, c.due_time, c.repeat_rule, c.remind, c.alert_offset, c.alert_time, pos]
+  const cols = [c.text, c.due_date, c.due_time, c.repeat_rule, c.remind, c.alert_offset, c.alert_time, c.category_id, pos]
   if (page === 'house') {
     await powerSyncDb.execute(
       `INSERT INTO ${table} (id, household_id, text, due_date, due_time, repeat_rule, remind,
-                             alert_offset, alert_time, position, done, done_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL)`,
+                             alert_offset, alert_time, category_id, position, done, done_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL)`,
       [id, householdId, ...cols],
     )
   } else {
@@ -285,8 +286,8 @@ export async function insertJob(page: JobPage, householdId: string, draft: JobDr
     // set by the database's own default.
     await powerSyncDb.execute(
       `INSERT INTO ${table} (id, text, due_date, due_time, repeat_rule, remind,
-                             alert_offset, alert_time, position, done, done_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL)`,
+                             alert_offset, alert_time, category_id, position, done, done_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL)`,
       [id, ...cols],
     )
   }
@@ -347,4 +348,93 @@ export async function endJobSeries(page: JobPage, id: string): Promise<void> {
 
 export async function deleteJob(page: JobPage, id: string): Promise<void> {
   await powerSyncDb.execute(`DELETE FROM ${JOB_TABLE[page]} WHERE id = ?`, [id])
+}
+
+/**
+ * Filing a job under another category (or Other, ''): its own narrow write,
+ * category and position only, landing at the END of the new category.
+ * Position is appended across the whole page, which is also the end of any
+ * one category in it.
+ */
+export async function setJobCategory(page: JobPage, householdId: string, id: string, categoryId: string): Promise<void> {
+  const table = JOB_TABLE[page]
+  const pos = appendPosition(
+    page === 'house'
+      ? await siblings(`SELECT position FROM ${table} WHERE household_id = ?`, [householdId])
+      : await siblings(`SELECT position FROM ${table}`, []),
+  )
+  await powerSyncDb.execute(`UPDATE ${table} SET category_id = ?, position = ? WHERE id = ?`, [
+    toDbId(categoryId), pos, id,
+  ])
+}
+
+/**
+ * Drag-to-reorder an UNDATED job within its category. Dated jobs sort by
+ * date and carry no grip. `groupIds` is the group's undated jobs exactly as
+ * `groupJobs()` rendered them (moved one included), so the write and the
+ * screen agree on what the siblings are — including a job whose category was
+ * deleted on another phone, which renders in Other.
+ */
+export async function repositionJob(page: JobPage, id: string, groupIds: string[], toIndex: number): Promise<void> {
+  const others = groupIds.filter((g) => g !== id)
+  if (others.length === 0) return
+  const rows = await powerSyncDb.getAll<Row>(
+    `SELECT id, position FROM ${JOB_TABLE[page]} WHERE id IN (${others.map(() => '?').join(', ')})`,
+    others,
+  )
+  const without = [...rows].sort(byPosition)
+  const pos = midpoint(positionOf(without[toIndex - 1]), positionOf(without[toIndex]))
+  await powerSyncDb.execute(`UPDATE ${JOB_TABLE[page]} SET position = ? WHERE id = ?`, [pos, id])
+}
+
+// ── job categories ──────────────────────────────────────────────────────────
+
+/**
+ * 🚨 Awaited BEFORE any job is filed under the new category. Uploads go in
+ * local write order, and the database guard nulls a job whose category is
+ * not there yet — so a job written first would land in Other on the server
+ * while showing in its category here.
+ */
+export async function insertJobCategory(page: JobPage, householdId: string, name: string): Promise<string> {
+  const id = newId()
+  const table = CATEGORY_TABLE[page]
+  if (page === 'house') {
+    const pos = appendPosition(await siblings(`SELECT position FROM ${table} WHERE household_id = ?`, [householdId]))
+    await powerSyncDb.execute(`INSERT INTO ${table} (id, household_id, name, position) VALUES (?, ?, ?, ?)`, [
+      id, householdId, name, pos,
+    ])
+  } else {
+    const pos = appendPosition(await siblings(`SELECT position FROM ${table}`, []))
+    await powerSyncDb.execute(`INSERT INTO ${table} (id, name, position) VALUES (?, ?, ?)`, [id, name, pos])
+  }
+  return id
+}
+
+export async function renameJobCategory(page: JobPage, id: string, name: string): Promise<void> {
+  await powerSyncDb.execute(`UPDATE ${CATEGORY_TABLE[page]} SET name = ? WHERE id = ?`, [name, id])
+}
+
+/**
+ * Its jobs move to Other first, then the category goes — child-first, as
+ * deleteList does. Nothing on the server cascades (there is no FK), so this
+ * write is what empties it; a job another phone files under it meanwhile is
+ * nulled by the database guard and reads as Other here.
+ */
+export async function deleteJobCategory(page: JobPage, id: string): Promise<void> {
+  await powerSyncDb.execute(`UPDATE ${JOB_TABLE[page]} SET category_id = NULL WHERE category_id = ?`, [id])
+  await powerSyncDb.execute(`DELETE FROM ${CATEGORY_TABLE[page]} WHERE id = ?`, [id])
+}
+
+/** Drag-to-reorder a category: one row's position. `toIndex` is among all of
+ *  the page's categories with the moved one removed. */
+export async function repositionJobCategory(page: JobPage, householdId: string, id: string, toIndex: number): Promise<void> {
+  const rows = await powerSyncDb.getAll<Row>(
+    page === 'house'
+      ? `SELECT id, position FROM ${CATEGORY_TABLE[page]} WHERE household_id = ?`
+      : `SELECT id, position FROM ${CATEGORY_TABLE[page]}`,
+    page === 'house' ? [householdId] : [],
+  )
+  const without = [...rows].sort(byPosition).filter((r) => r.id !== id)
+  const pos = midpoint(positionOf(without[toIndex - 1]), positionOf(without[toIndex]))
+  await powerSyncDb.execute(`UPDATE ${CATEGORY_TABLE[page]} SET position = ? WHERE id = ?`, [pos, id])
 }

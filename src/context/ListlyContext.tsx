@@ -1,13 +1,14 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import type {
-  DeviceState, Job, JobDraft, JobPage, LedgerCategory, List, ShopCompletionDraft,
+  DeviceState, Job, JobCategory, JobDraft, JobPage, LedgerCategory, List, ShopCompletionDraft,
 } from '../types'
 import {
   clearDismissal,
   loadDeviceState,
   pruneDeviceState,
   saveDeviceState,
+  withCategoryOpen,
   withDismissal,
   withListOpen,
 } from '../lib/deviceState'
@@ -22,7 +23,7 @@ import {
 } from '../lib/powersync/ledger'
 import type { LocationOption } from '../types'
 import { useWatchedQuery } from '../lib/powersync/useWatchedQuery'
-import { byPosition, rowToItem, rowToJob, rowToList } from '../lib/powersync/mapping'
+import { byPosition, rowToItem, rowToJob, rowToJobCategory, rowToList } from '../lib/powersync/mapping'
 import { fullIndexForVisibleMove } from '../lib/listOrder'
 import * as writes from '../lib/powersync/writes'
 import { nextOccurrence } from '../lib/recurrence'
@@ -36,8 +37,8 @@ import { nextOccurrence } from '../lib/recurrence'
  * touching when the backend arrived. Phase 1's `useState` became watched
  * queries; the mutators became narrow SQL.
  *
- * What is still NOT here: which lists are expanded and which banners are
- * dismissed. Those are per-device localStorage
+ * What is still NOT here: which lists are expanded, which job categories are
+ * collapsed, and which banners are dismissed. Those are per-device localStorage
  * (Adam, 2026-09-20) and are deliberately kept in a separate `device` slice
  * so it stays obvious they are not household data and must never get a
  * column.
@@ -120,6 +121,21 @@ interface ListlyValue {
   householdSize: number
 
   dismissBanner: (jobId: string) => void
+
+  /** Both pages' job categories, each in its page's order (§12). */
+  jobCategories: JobCategory[]
+  /** Resolves to the new category's id. Awaited before filing a job under
+   *  it: the database guard nulls a job whose category has not arrived. */
+  addJobCategory: (page: JobPage, name: string) => Promise<string>
+  renameJobCategory: (id: string, name: string) => void
+  /** Its jobs go to Other; no job is deleted. */
+  deleteJobCategory: (id: string) => void
+  reorderJobCategories: (page: JobPage, fromIndex: number, toIndex: number) => void
+  /** Reorder an UNDATED job among `groupIds`, its group's undated jobs as
+   *  rendered. Dated jobs sort by date and do not reorder. */
+  reorderJobs: (page: JobPage, groupIds: string[], fromIndex: number, toIndex: number) => void
+  /** Per device: collapsing a category never collapses it on the other phone. */
+  setCategoryOpen: (key: string, open: boolean) => void
 }
 
 const Ctx = createContext<ListlyValue | null>(null)
@@ -146,6 +162,8 @@ export function ListlyProvider({ children }: { children: ReactNode }) {
   const itemRows = useWatchedQuery('SELECT * FROM lst_shopping_items')
   const houseRows = useWatchedQuery('SELECT * FROM lst_house_jobs')
   const mineRows = useWatchedQuery('SELECT * FROM lst_my_jobs')
+  const houseCatRows = useWatchedQuery('SELECT * FROM lst_house_job_categories')
+  const mineCatRows = useWatchedQuery('SELECT * FROM lst_my_job_categories')
   // One member → House jobs is hidden (PROMPT-01 Q11). Read from the synced
   // mirror, so it works offline and follows a partner joining or leaving.
   const memberRows = useWatchedQuery(
@@ -174,6 +192,14 @@ export function ListlyProvider({ children }: { children: ReactNode }) {
       ...[...mineRows].sort(byPosition).map((r) => rowToJob(r, 'mine')),
     ],
     [houseRows, mineRows],
+  )
+
+  const jobCategories = useMemo<JobCategory[]>(
+    () => [
+      ...[...houseCatRows].sort(byPosition).map((r) => rowToJobCategory(r, 'house')),
+      ...[...mineCatRows].sort(byPosition).map((r) => rowToJobCategory(r, 'mine')),
+    ],
+    [houseCatRows, mineCatRows],
   )
 
   const [device, setDevice] = useState<DeviceState>(() => loadDeviceState())
@@ -431,10 +457,15 @@ export function ListlyProvider({ children }: { children: ReactNode }) {
       const job = findJob(id)
       if (!job) return
       run(writes.saveJob(job.page, id, { ...draft, text: draft.text.trim() || job.text }))
+      // A category change is its own narrow write, landing the job at the end
+      // of its new group.
+      if (draft.categoryId !== job.categoryId) {
+        run(writes.setJobCategory(job.page, householdId, id, draft.categoryId))
+      }
       // Editing and saving a job re-arms its banner.
       setDevice((d) => clearDismissal(d, id))
     },
-    [findJob],
+    [findJob, householdId],
   )
 
   const deleteJob = useCallback(
@@ -450,6 +481,55 @@ export function ListlyProvider({ children }: { children: ReactNode }) {
     setDevice((d) => withDismissal(d, jobId))
   }, [])
 
+  const findCategory = useCallback((id: string) => jobCategories.find((c) => c.id === id), [jobCategories])
+
+  const addJobCategory = useCallback(
+    async (page: JobPage, name: string) => {
+      const trimmed = name.trim()
+      if (!trimmed) throw new Error('Give the category a name first.')
+      // Deliberately not run(): the caller awaits it, both to name a failure
+      // and to file a job under it only once it is written.
+      return writes.insertJobCategory(page, householdId, trimmed)
+    },
+    [householdId],
+  )
+
+  const renameJobCategory = useCallback(
+    (id: string, name: string) => {
+      const cat = findCategory(id)
+      const trimmed = name.trim()
+      if (cat && trimmed && trimmed !== cat.name) run(writes.renameJobCategory(cat.page, id, trimmed))
+    },
+    [findCategory],
+  )
+
+  const deleteJobCategory = useCallback(
+    (id: string) => {
+      const cat = findCategory(id)
+      if (cat) run(writes.deleteJobCategory(cat.page, id))
+    },
+    [findCategory],
+  )
+
+  const reorderJobCategories = useCallback(
+    (page: JobPage, fromIndex: number, toIndex: number) => {
+      if (fromIndex === toIndex) return
+      const cat = jobCategories.filter((c) => c.page === page)[fromIndex]
+      if (cat) run(writes.repositionJobCategory(page, householdId, cat.id, toIndex))
+    },
+    [householdId, jobCategories],
+  )
+
+  const reorderJobs = useCallback((page: JobPage, groupIds: string[], fromIndex: number, toIndex: number) => {
+    if (fromIndex === toIndex) return
+    const id = groupIds[fromIndex]
+    if (id) run(writes.repositionJob(page, id, groupIds, toIndex))
+  }, [])
+
+  const setCategoryOpen = useCallback((key: string, open: boolean) => {
+    setDevice((d) => withCategoryOpen(d, key, open))
+  }, [])
+
   const value = useMemo<ListlyValue>(
     () => ({
       lists, jobs, device, visibleLists,
@@ -457,6 +537,8 @@ export function ListlyProvider({ children }: { children: ReactNode }) {
       addItem, toggleItem, saveItem, deleteItem, reorderItems, reorderLists, snapshotShop, finishShop,
       jobsFor, addJob, toggleJob, toggleRemind, saveJob, deleteJob, householdSize,
       dismissBanner,
+      jobCategories, addJobCategory, renameJobCategory, deleteJobCategory, reorderJobCategories, reorderJobs,
+      setCategoryOpen,
       ledgerGateOpen, categories, locationOptions, setListCategory,
       saveShopCompletion, failedCompletions, retryLedger,
     }),
@@ -466,6 +548,8 @@ export function ListlyProvider({ children }: { children: ReactNode }) {
       addItem, toggleItem, saveItem, deleteItem, reorderItems, reorderLists, snapshotShop, finishShop,
       jobsFor, addJob, toggleJob, toggleRemind, saveJob, deleteJob, householdSize,
       dismissBanner,
+      jobCategories, addJobCategory, renameJobCategory, deleteJobCategory, reorderJobCategories, reorderJobs,
+      setCategoryOpen,
       ledgerGateOpen, categories, locationOptions, setListCategory,
       saveShopCompletion, failedCompletions, retryLedger,
     ],

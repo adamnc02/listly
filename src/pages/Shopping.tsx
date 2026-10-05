@@ -23,7 +23,11 @@ export function Shopping() {
   // Lists reorder by the grip on their header (TECHNICAL.md §17). The rows
   // are marked `data-drag-list`, not the default `data-drag-row`, because
   // each card contains item rows carrying that one.
-  const listDrag = useDragReorder(visibleLists.length, reorderLists, 'data-drag-list')
+  const { draggingIndex, dropIndex, containerRef, handleProps } = useDragReorder(
+    visibleLists.length,
+    reorderLists,
+    'data-drag-list',
+  )
 
   // 🚨 This used to fail silently. "Add list did nothing" was reported three
   // times and the database confirmed nothing was written — but with no
@@ -58,20 +62,20 @@ export function Shopping() {
           workstream keeps paying for. */}
       <LedgerErrors />
 
-      <div className="stack" ref={listDrag.containerRef}>
+      <div className="stack" ref={containerRef}>
         {visibleLists.map((list, index) => (
           <div key={list.id}>
-            {listDrag.dropIndex === index && <div className="drop-cursor between" role="presentation" />}
+            {dropIndex === index && <div className="drop-cursor between" role="presentation" />}
             <ShoppingList
               list={list}
               onEditItem={(itemId) => setEditing({ listId: list.id, itemId })}
               onPriceShop={setPricing}
-              dragHandle={listDrag.handleProps(index)}
-              dragging={listDrag.draggingIndex === index}
+              dragHandle={handleProps(index)}
+              dragging={draggingIndex === index}
             />
           </div>
         ))}
-        {listDrag.dropIndex === visibleLists.length && <div className="drop-cursor between" role="presentation" />}
+        {dropIndex === visibleLists.length && <div className="drop-cursor between" role="presentation" />}
       </div>
 
       {visibleLists.length === 0 && <div className="empty">No lists yet — start one below.</div>}

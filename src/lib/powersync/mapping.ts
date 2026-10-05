@@ -1,4 +1,4 @@
-import type { IsoDate, Item, Job, JobPage, List } from '../../types'
+import type { IsoDate, Item, Job, JobCategory, JobPage, List } from '../../types'
 
 /**
  * The mapping boundary: PowerSync's flat SQLite rows ↔ the app's types.
@@ -74,7 +74,12 @@ export function rowToJob(row: Row, page: JobPage): Job {
     alertOffset: fromDbId(row.alert_offset),
     alertTime: fromDbId(row.alert_time),
     doneAt: fromDbId(row.done_at),
+    categoryId: fromDbId(row.category_id),
   }
+}
+
+export function rowToJobCategory(row: Row, page: JobPage): JobCategory {
+  return { id: str(row.id), page, name: str(row.name) }
 }
 
 /** `order by position, id` — the ordering every list is read back with. */

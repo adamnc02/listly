@@ -1,4 +1,4 @@
-import type { DeviceState, IsoDate } from '../types'
+import type { DeviceState, IsoDate, JobPage } from '../types'
 import { todayIso } from './date'
 
 /**
@@ -28,6 +28,7 @@ const KEY = 'listly:device-state:v1'
 const EMPTY: DeviceState = {
   openLists: {},
   dismissedBanners: {},
+  collapsedCategories: {},
 }
 
 export function loadDeviceState(): DeviceState {
@@ -38,6 +39,7 @@ export function loadDeviceState(): DeviceState {
     return {
       openLists: parsed.openLists ?? {},
       dismissedBanners: parsed.dismissedBanners ?? {},
+      collapsedCategories: parsed.collapsedCategories ?? {},
       // A stored `doneOpen` (the old collapsible Done section) is ignored and
       // dropped on the next save; Done is a sheet now (TECHNICAL.md §12).
     }
@@ -70,6 +72,22 @@ export function clearDismissal(state: DeviceState, jobId: string): DeviceState {
   const next = { ...state.dismissedBanners }
   delete next[jobId]
   return { ...state, dismissedBanners: next }
+}
+
+/** The device-state key for a job category's group; `''` is Other. */
+export const categoryKey = (page: JobPage, categoryId: string): string => categoryId || `other:${page}`
+
+/**
+ * Collapsed job categories are NOT pruned. pruneDeviceState runs on the first
+ * render, before any row has arrived, and would forget every collapse on each
+ * cold start; a handful of keys for deleted categories costs nothing.
+ */
+export function withCategoryOpen(state: DeviceState, key: string, open: boolean): DeviceState {
+  if (open === !(key in state.collapsedCategories)) return state
+  const next = { ...state.collapsedCategories }
+  if (open) delete next[key]
+  else next[key] = true
+  return { ...state, collapsedCategories: next }
 }
 
 export function withListOpen(state: DeviceState, listId: string, open: boolean): DeviceState {
