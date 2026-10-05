@@ -1,4 +1,4 @@
-import type { DeviceState, IsoDate, JobPage } from '../types'
+import type { DeviceState, IsoDate } from '../types'
 import { todayIso } from './date'
 
 /**
@@ -28,7 +28,6 @@ const KEY = 'listly:device-state:v1'
 const EMPTY: DeviceState = {
   openLists: {},
   dismissedBanners: {},
-  doneOpen: { house: false, mine: false },
 }
 
 export function loadDeviceState(): DeviceState {
@@ -39,7 +38,8 @@ export function loadDeviceState(): DeviceState {
     return {
       openLists: parsed.openLists ?? {},
       dismissedBanners: parsed.dismissedBanners ?? {},
-      doneOpen: { ...EMPTY.doneOpen, ...(parsed.doneOpen ?? {}) },
+      // A stored `doneOpen` (the old collapsible Done section) is ignored and
+      // dropped on the next save; Done is a sheet now (TECHNICAL.md §12).
     }
   } catch {
     return EMPTY
@@ -74,10 +74,6 @@ export function clearDismissal(state: DeviceState, jobId: string): DeviceState {
 
 export function withListOpen(state: DeviceState, listId: string, open: boolean): DeviceState {
   return { ...state, openLists: { ...state.openLists, [listId]: open } }
-}
-
-export function withDoneOpen(state: DeviceState, page: JobPage, open: boolean): DeviceState {
-  return { ...state, doneOpen: { ...state.doneOpen, [page]: open } }
 }
 
 /**

@@ -73,6 +73,7 @@ export function rowToJob(row: Row, page: JobPage): Job {
     repeat: fromDbId(row.repeat_rule),
     alertOffset: fromDbId(row.alert_offset),
     alertTime: fromDbId(row.alert_time),
+    doneAt: fromDbId(row.done_at),
   }
 }
 

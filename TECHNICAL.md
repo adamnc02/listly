@@ -255,9 +255,9 @@ layer is a rename rather than a redesign.
 | `IsoDate` | `'YYYY-MM-DD'`. `''` means "no due date", matching the `'' ↔ NULL` rule the sync layer applies |
 | `Item` | `id`, `text`, `done` |
 | `List` | plus `isDefault`, `createdAt`, `neverHadItems`, `categoryId` |
-| `Job` | `page` (`'house' \| 'mine'`), `text`, `due`, `remind`, `done`, plus `dueTime`, `repeat`, `alertOffset`, `alertTime` (§12) |
+| `Job` | `page` (`'house' \| 'mine'`), `text`, `due`, `remind`, `done`, `doneAt`, plus `dueTime`, `repeat`, `alertOffset`, `alertTime` (§12) |
 | `JobDraft` | What the job sheet saves in one go; written only through `jobColumns()` (§12) |
-| `DeviceState` | `openLists`, `dismissedBanners`, `doneOpen` — never synced (§6) |
+| `DeviceState` | `openLists`, `dismissedBanners` — never synced (§6) |
 | `LedgerCategory` | Read through the `lst_ref_categories` mirror. Listly reads these and writes them never |
 | `LocationOption` | One entry in the Finish-shop location picker |
 | `ShopCompletionDraft` | What Finish shop collects before writing a completion row |
@@ -327,8 +327,9 @@ the database via a trigger.
 
 ## 6. Per-device state
 
-`src/lib/deviceState.ts`. Which lists are expanded, which banners are dismissed, which Done
-sections are open: **`localStorage`, never a column.**
+`src/lib/deviceState.ts`. Which lists are expanded and which banners are dismissed:
+**`localStorage`, never a column.** (A stored `doneOpen` from the old collapsible Done section is
+ignored on load and dropped on the next save.)
 
 Syncing them would mean one partner collapsing the Tesco list collapses it on the other's phone
 mid-shop. So `is_open` never becomes a column in `listly.shopping_lists`, and this file is where
@@ -622,10 +623,15 @@ component, on purpose.**
 > still `my_jobs` and the page id still `'mine'`, so `?tab=mine` from a notification keeps
 > opening it. Renaming a published table is what MIGRATION-LESSONS §19 forbids.
 
-The page is: a heading with "N to do" and a **+**, the open jobs sorted by `sortOpenJobs`, and a
-collapsible Done section whose open/closed state is per device. **There is no inline add form**:
-the + opens the same sheet a tap on a job does, because a job has a repeat and an alert to set as
-well as a name and a date.
+The page is: a heading with "N to do", a **Done folder** and a **+**, then the open jobs sorted by
+`sortOpenJobs`. **There is no inline add form**: the + opens the same sheet a tap on a job does,
+because a job has a repeat and an alert to set as well as a name and a date.
+
+**Done is a folder, not a section.** The folder button carries a brown count of that page's done
+jobs and opens `components/DoneSheet.tsx`: done jobs newest first (by `done_at`), each with a ticked
+box that moves it back. The sheet stays open, so several can come back in a row. The count is
+brown, not red: done is not an alert. With nothing done the folder is `.waiting` and a tap says so
+(§19). A recurring job never arrives here — ticking it moves it on (below).
 
 **House jobs is hidden when the household has exactly one member** (Adam, 2026-09-25), read from
 the synced `lst_ref_household_members` mirror, and its banners (§13) with it. Exactly one: zero

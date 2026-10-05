@@ -9,7 +9,6 @@ import {
   pruneDeviceState,
   saveDeviceState,
   withDismissal,
-  withDoneOpen,
   withListOpen,
 } from '../lib/deviceState'
 import { loadRoundUpCache, pruneRoundUpCache, saveRoundUpCache } from '../lib/roundUpCache'
@@ -37,8 +36,8 @@ import { nextOccurrence } from '../lib/recurrence'
  * touching when the backend arrived. Phase 1's `useState` became watched
  * queries; the mutators became narrow SQL.
  *
- * What is still NOT here: which lists are expanded, which banners are
- * dismissed, which Done sections are open. Those are per-device localStorage
+ * What is still NOT here: which lists are expanded and which banners are
+ * dismissed. Those are per-device localStorage
  * (Adam, 2026-09-20) and are deliberately kept in a separate `device` slice
  * so it stays obvious they are not household data and must never get a
  * column.
@@ -119,7 +118,6 @@ interface ListlyValue {
   /** How many people are in this household, from the synced membership
    *  mirror. 0 until it has synced — "unknown", never "alone". */
   householdSize: number
-  setDoneOpen: (page: JobPage, open: boolean) => void
 
   dismissBanner: (jobId: string) => void
 }
@@ -448,10 +446,6 @@ export function ListlyProvider({ children }: { children: ReactNode }) {
     [findJob],
   )
 
-  const setDoneOpen = useCallback((page: JobPage, open: boolean) => {
-    setDevice((d) => withDoneOpen(d, page, open))
-  }, [])
-
   const dismissBanner = useCallback((jobId: string) => {
     setDevice((d) => withDismissal(d, jobId))
   }, [])
@@ -461,7 +455,7 @@ export function ListlyProvider({ children }: { children: ReactNode }) {
       lists, jobs, device, visibleLists,
       addList, deleteList, toggleDefault, setListOpen,
       addItem, toggleItem, saveItem, deleteItem, reorderItems, reorderLists, snapshotShop, finishShop,
-      jobsFor, addJob, toggleJob, toggleRemind, saveJob, deleteJob, setDoneOpen, householdSize,
+      jobsFor, addJob, toggleJob, toggleRemind, saveJob, deleteJob, householdSize,
       dismissBanner,
       ledgerGateOpen, categories, locationOptions, setListCategory,
       saveShopCompletion, failedCompletions, retryLedger,
@@ -470,7 +464,7 @@ export function ListlyProvider({ children }: { children: ReactNode }) {
       lists, jobs, device, visibleLists,
       addList, deleteList, toggleDefault, setListOpen,
       addItem, toggleItem, saveItem, deleteItem, reorderItems, reorderLists, snapshotShop, finishShop,
-      jobsFor, addJob, toggleJob, toggleRemind, saveJob, deleteJob, setDoneOpen, householdSize,
+      jobsFor, addJob, toggleJob, toggleRemind, saveJob, deleteJob, householdSize,
       dismissBanner,
       ledgerGateOpen, categories, locationOptions, setListCategory,
       saveShopCompletion, failedCompletions, retryLedger,

@@ -5,7 +5,8 @@ import { dueLabel, isDueSoon, sortOpenJobs } from '../lib/jobs'
 import { shortRule } from '../lib/recurrence'
 import { alertSummary } from '../lib/alerts'
 import { JobSheet } from '../components/JobSheet'
-import { Bell, Chevron, Plus, Tick } from '../components/Icons'
+import { DoneSheet } from '../components/DoneSheet'
+import { Bell, Folder, Plus } from '../components/Icons'
 
 const TITLE: Record<JobPage, string> = { house: 'House jobs', mine: 'To-Do' }
 
@@ -32,14 +33,15 @@ const TITLE: Record<JobPage, string> = { house: 'House jobs', mine: 'To-Do' }
 export function JobsPage({
   page, flashJobId = null, flashKey = 0,
 }: { page: JobPage; flashJobId?: string | null; flashKey?: number }) {
-  const { jobsFor, device, toggleJob, toggleRemind, setDoneOpen } = useListly()
+  const { jobsFor, toggleJob, toggleRemind } = useListly()
   // null = closed, 'new' = creating, otherwise the id being edited.
   const [sheet, setSheet] = useState<string | null>(null)
+  const [doneSheet, setDoneSheet] = useState(false)
+  const [doneHint, setDoneHint] = useState(false)
 
   const all = jobsFor(page)
   const open = sortOpenJobs(all.filter((j) => !j.done))
-  const done = all.filter((j) => j.done)
-  const doneOpen = device.doneOpen[page]
+  const doneCount = all.filter((j) => j.done).length
 
   // A tapped reminder names its job (src/lib/openIntent.ts): bring the row
   // into view. The flash itself is CSS on the row. A job that is done,
@@ -54,10 +56,33 @@ export function JobsPage({
       <div className="pagehead">
         <h1 className="grow">{TITLE[page]}</h1>
         <span>{open.length} to do</span>
+        {/* Done is a folder with a count, opening a sheet. With nothing done
+            it is .waiting and says so if tapped (§19). */}
+        <button
+          className={`icon-btn done-btn${doneCount ? '' : ' waiting'}`}
+          onClick={() => {
+            if (!doneCount) {
+              setDoneHint(true)
+              return
+            }
+            setDoneHint(false)
+            setDoneSheet(true)
+          }}
+          aria-label={`Done jobs, ${doneCount}`}
+        >
+          <Folder />
+          {doneCount > 0 && <span className="done-count" aria-hidden="true">{doneCount}</span>}
+        </button>
         <button className="icon-btn round-add" onClick={() => setSheet('new')} aria-label={`Add a job to ${TITLE[page]}`}>
           <Plus />
         </button>
       </div>
+
+      {doneHint && !doneCount && (
+        <p className="help" style={{ padding: '0 6px' }} role="status">
+          Nothing done yet — ticked jobs go in the folder.
+        </p>
+      )}
 
       <div className="card jobs">
         {open.map((job) => (
@@ -110,38 +135,8 @@ export function JobsPage({
         {open.length === 0 && <div className="empty">All jobs done. Nice.</div>}
       </div>
 
-      <div className={`card done-card${doneOpen ? ' open' : ''}`}>
-        <button
-          className="donehead"
-          onClick={() => setDoneOpen(page, !doneOpen)}
-          aria-expanded={doneOpen}
-        >
-          <Chevron />
-          <span className="name">Done</span>
-          <span style={{ fontSize: 20 }}>{done.length}</span>
-        </button>
-        {doneOpen && (
-          <div style={{ padding: '0 8px 10px' }}>
-            {done.map((job) => (
-              <div className="row" style={{ minHeight: 46 }} key={job.id}>
-                <button
-                  className="tick"
-                  onClick={() => toggleJob(job.id)}
-                  aria-pressed={true}
-                  aria-label={`Move ${job.text} back`}
-                >
-                  <span className="box on">
-                    <Tick />
-                  </span>
-                </button>
-                <span className="donetext">{job.text}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
       {sheet && <JobSheet page={page} jobId={sheet === 'new' ? null : sheet} onClose={() => setSheet(null)} />}
+      {doneSheet && <DoneSheet page={page} onClose={() => setDoneSheet(false)} />}
     </div>
   )
 }

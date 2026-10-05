@@ -137,6 +137,13 @@ export const StarFilled = ({ size = 18 }: Props) => (
   </svg>
 )
 
+/** The jobs pages' Done sheet: a folder, to the same 2px rounded-line rule. */
+export const Folder = () => (
+  <Line size={22}>
+    <path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2.5h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z" />
+  </Line>
+)
+
 export const Trash = () => (
   <Line size={20}>
     <path d="M4.5 7h15" />

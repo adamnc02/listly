@@ -126,7 +126,7 @@ merely avoided. Keep it that way.
 
 ## Per-device state is not data
 
-Which lists are expanded, which banners are dismissed, which Done sections are open — all
+Which lists are expanded and which banners are dismissed — all
 `localStorage`, never columns (Adam, 2026-09-20). Syncing them would mean one partner collapsing the
 Tesco list collapses it on the other's phone mid-shop. `src/lib/deviceState.ts` is where that
 decision lives; every read and write is wrapped in try/catch and falls back to defaults.

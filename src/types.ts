@@ -73,6 +73,9 @@ export interface Job {
   alertOffset: string
   /** 'HH:MM' for day/week offsets; '' is the default (08:00). */
   alertTime: string
+  /** When it was ticked done (an ISO timestamp), or '' while open. Orders
+   *  the Done sheet, newest first. */
+  doneAt: string
 }
 
 /** Everything the create/edit sheet saves in one go (TECHNICAL.md §12). */
@@ -85,7 +88,6 @@ export type JobDraft = Pick<Job, 'text' | 'due' | 'dueTime' | 'repeat' | 'remind
 export interface DeviceState {
   openLists: Record<string, boolean>
   dismissedBanners: Record<string, IsoDate>
-  doneOpen: Record<JobPage, boolean>
 }
 
 /**

@@ -95,7 +95,7 @@
   --alert-bg: #F5CEC8;     /* due-soon banner fill: deeper than --chip-soon-bg,
                              which is too close to --ground to read as a fill.
                              --chip-soon-ink on it is 5.18:1 */
-  --done-card: #EFE7DB;    /* the Done section's background */
+  --done-card: #EFE7DB;    /* the Done folder button's background */
   --done-item: #8C7C6E;    /* ticked shopping items */
   --done-job: #7E6E60;     /* done jobs, struck through */
   --pill-ink: #5C7A4C;     /* count-pill text on --sage-wash */
@@ -371,7 +371,7 @@ main {
 /* The header is the grip plus the toggle, side by side: the grip is never
    inside the button, so a long-press to drag cannot also open the card. */
 .listhead { display: flex; align-items: stretch; }
-.listhead > .grip { width: 36px; padding-left: 12px; }
+.listhead > .grip { width: 30px; padding-left: 8px; align-items: center; }  /* lines up with the item grips below */
 .listtoggle {
   flex: 1; min-width: 0;
   display: flex; align-items: center; gap: 10px;
@@ -392,8 +392,7 @@ main {
 }
 .defmark { color: var(--brown); display: flex; }
 .chev { transition: transform .2s; flex-shrink: 0; }
-.open > .listhead .chev,
-.open > .donehead .chev { transform: rotate(90deg); }
+.open > .listhead .chev { transform: rotate(90deg); }
 .listbody {
   border-top: 1.5px dashed var(--line);
   padding: 6px 8px 12px;
@@ -579,20 +578,28 @@ input[type=date], input[type=time] {
 .chip.soon { background: var(--chip-soon-bg); color: var(--chip-soon-ink); }
 .bell { color: var(--bell-off); }
 .bell[aria-pressed=true] { color: #fff; background: var(--sage); }
-.done-card { background: var(--done-card); }
-.donehead {
-  width: 100%;
-  display: flex; align-items: center; gap: 10px;
-  padding: 10px 16px;
-  min-height: 52px;
-  background: transparent;
-  border: none;
-  color: var(--soft);
-  text-align: left;
+/* Done: a folder in the page heading with a count, opening a sheet
+   (DoneSheet). The count is brown, not red — done is not an alert — and
+   uses .alert-count's shape and --ground ring so it reads as a badge. */
+.done-btn { position: relative; background: var(--done-card); color: var(--soft); }
+.done-count,
+.pagehead .done-count {   /* .pagehead span would otherwise grey the number out */
+  position: absolute;
+  top: -6px; right: -6px;
+  min-width: 24px; height: 24px;
+  padding: 0 6px;
+  border-radius: 12px;
+  background: var(--brown);
+  color: #fff;
+  font-size: 17px; font-weight: 700;
+  line-height: 24px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 0 0 2px var(--ground);
+  pointer-events: none;
 }
-.donehead .name { font-size: 26px; font-weight: 700; flex: 1; }
-.donetext { font-size: 24px; color: var(--done-job); text-decoration: line-through; padding-left: 4px; }
-.done-card .row { background: transparent; }
+.done-list { display: flex; flex-direction: column; }
+.donetext { font-size: 24px; color: var(--done-job); text-decoration: line-through; padding-left: 4px; overflow-wrap: anywhere; min-width: 0; }
 
 /* ---------- tab bar: a FLOATING PILL ----------
    Ported from BLOC's #nav (PROMPT-03 §2.7, Adam on device 2026-09-20). The
