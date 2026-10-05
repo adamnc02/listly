@@ -107,7 +107,15 @@ Every `UPDATE` is **narrow**, setting only what changed, because PowerSync resol
 column — that is what lets two phones edit the same list at once. A "write the whole row" helper
 would destroy it everywhere at once, so there isn't one.
 
-- Deletes go **child-first**; inserts parent-first (§27).
+- Deletes go **child-first**; inserts parent-first (§27). The connector uploads **in local write
+  order**, one transaction at a time, so "first" means written first on the phone.
+- 🚨 **A new job category is written, and awaited, before any job names it.** Job `category_id` has
+  no foreign key; a database guard instead turns a category the job may not use — including one not
+  there *yet* — into NULL ("Other"). A job uploaded ahead of its brand-new category would be booked
+  in Other on the server while showing in its category on the phone. `JobSheet` awaits
+  `addJobCategory()` before saving the job for exactly this.
+- Filing a job under another category is its own write (`category_id` + `position`), not part of the
+  job's form save.
 - Moving an item between lists is an `UPDATE` of `list_id`, never a delete plus an insert — the row
   identity has to stay stable for two devices to converge.
 - Clearing a due date clears `remind` in the **same** statement, or the row momentarily violates its
@@ -126,7 +134,7 @@ merely avoided. Keep it that way.
 
 ## Per-device state is not data
 
-Which lists are expanded, which banners are dismissed, which Done sections are open — all
+Which lists are expanded, which job categories are collapsed and which banners are dismissed — all
 `localStorage`, never columns (Adam, 2026-09-20). Syncing them would mean one partner collapsing the
 Tesco list collapses it on the other's phone mid-shop. `src/lib/deviceState.ts` is where that
 decision lives; every read and write is wrapped in try/catch and falls back to defaults.

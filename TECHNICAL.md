@@ -73,8 +73,10 @@ src/
     FinishShopSheet.tsx   "Price this shop"
     ShopConfirmation.tsx  Wallet → shop, then the ledger's answer (§9)
     ManageListsSheet.tsx  Every list, hidden ones included
+    ManageCategoriesSheet.tsx  One jobs page's categories: add, rename, delete (§12)
+    DoneSheet.tsx         One jobs page's done jobs, newest first (§12)
     ItemEditSheet.tsx     Rename / delete / move an item
-    JobEditSheet.tsx      Edit a job
+    JobSheet.tsx          Create and edit a job, its category, repeat and alert (§12)
     DueSoonBanners.tsx    The due-soon banner and its count, on every tab
     LedgerErrors.tsx      "Couldn't add to the ledger — tap to retry"
     AccountModal.tsx      Identity, link code, delete my app data
@@ -88,6 +90,8 @@ src/
   lib/
     date.ts               A byte-identical copy of the ledger's
     ids.ts  jobs.ts  deviceState.ts  useDragReorder.ts
+    jobGroups.ts          What a jobs page shows: its cards and their order (§12)
+    listOrder.ts          A drag among visible lists, written among all of them (§8)
     push.ts  pushState.ts  Web Push, the browser half (§22)
     shopConfirmation.ts   When the confirmation stops, and what it ends on (§9)
     syncHealth.ts         THE answer to "is this syncing?" — dot and panel share it (§18)
@@ -255,9 +259,10 @@ layer is a rename rather than a redesign.
 | `IsoDate` | `'YYYY-MM-DD'`. `''` means "no due date", matching the `'' ↔ NULL` rule the sync layer applies |
 | `Item` | `id`, `text`, `done` |
 | `List` | plus `isDefault`, `createdAt`, `neverHadItems`, `categoryId` |
-| `Job` | `page` (`'house' \| 'mine'`), `text`, `due`, `remind`, `done`, plus `dueTime`, `repeat`, `alertOffset`, `alertTime` (§12) |
+| `Job` | `page` (`'house' \| 'mine'`), `text`, `due`, `remind`, `done`, `doneAt`, `categoryId` (`''` = Other), plus `dueTime`, `repeat`, `alertOffset`, `alertTime` (§12) |
+| `JobCategory` | `id`, `page`, `name` — a House jobs or To-Do category (§12) |
 | `JobDraft` | What the job sheet saves in one go; written only through `jobColumns()` (§12) |
-| `DeviceState` | `openLists`, `dismissedBanners`, `doneOpen` — never synced (§6) |
+| `DeviceState` | `openLists`, `dismissedBanners`, `collapsedCategories` — never synced (§6) |
 | `LedgerCategory` | Read through the `lst_ref_categories` mirror. Listly reads these and writes them never |
 | `LocationOption` | One entry in the Finish-shop location picker |
 | `ShopCompletionDraft` | What Finish shop collects before writing a completion row |
@@ -293,8 +298,9 @@ The value, by area:
 - **Finishing a shop** — `snapshotShop`, `finishShop` (§9).
 - **The ledger bridge** — `ledgerGateOpen`, `categories`, `locationOptions`, `setListCategory`,
   `saveShopCompletion`, `failedCompletions`, `retryLedger`.
-- **Jobs** — `jobsFor`, `addJob`, `toggleJob`, `toggleRemind`, `saveJob`, `deleteJob`,
-  `setDoneOpen`.
+- **Jobs** — `jobsFor`, `addJob`, `toggleJob`, `toggleRemind`, `saveJob`, `deleteJob`.
+- **Job categories** — `jobCategories`, `addJobCategory`, `renameJobCategory`, `deleteJobCategory`,
+  `reorderJobCategories`, `reorderJobs`, `setCategoryOpen`.
 - **Device** — `device`, `dismissBanner`.
 
 Reads are `useWatchedQuery` over the local PowerSync database, so every one of them re-evaluates on
@@ -327,8 +333,12 @@ the database via a trigger.
 
 ## 6. Per-device state
 
-`src/lib/deviceState.ts`. Which lists are expanded, which banners are dismissed, which Done
-sections are open: **`localStorage`, never a column.**
+`src/lib/deviceState.ts`. Which lists are expanded, which job categories are collapsed and which
+banners are dismissed: **`localStorage`, never a column.** Categories are stored by what is
+*collapsed* (keyed by category id, or `other:<page>`), so a new category starts open. They are not
+pruned: `pruneDeviceState` runs before any row has arrived and would forget every collapse on each
+cold start, and a few keys for deleted categories cost nothing. (A stored `doneOpen` from the old collapsible Done section is
+ignored on load and dropped on the next save.)
 
 Syncing them would mean one partner collapsing the Tesco list collapses it on the other's phone
 mid-shop. So `is_open` never becomes a column in `listly.shopping_lists`, and this file is where
@@ -396,6 +406,15 @@ item (§4). Manage lists is where a hidden list is found again.
 
 Items reorder by long-press drag (§17). Tapping an item's text opens the item sheet (§11); tapping
 its box ticks it.
+
+**Lists reorder the same way**, by a grip at the left of each card's header. The header is the grip
+and a toggle button side by side; the grip is never inside the button, so a long-press to drag
+cannot also open or close the card. 🚨 **The drag happens among the visible lists, and the write
+lands among all of them**: a hidden list keeps its `position` and reappears where it was.
+`lib/listOrder.ts` `fullIndexForVisibleMove()` maps one onto the other; using the visible index
+directly against the full order drops the list on the wrong side of a hidden one, so a list
+dragged between B and C stays above B. `scripts/verify-list-reorder.ts` carries that version as
+its control.
 
 ---
 
@@ -613,10 +632,70 @@ component, on purpose.**
 > still `my_jobs` and the page id still `'mine'`, so `?tab=mine` from a notification keeps
 > opening it. Renaming a published table is what MIGRATION-LESSONS §19 forbids.
 
-The page is: a heading with "N to do" and a **+**, the open jobs sorted by `sortOpenJobs`, and a
-collapsible Done section whose open/closed state is per device. **There is no inline add form**:
-the + opens the same sheet a tap on a job does, because a job has a repeat and an alert to set as
-well as a name and a date.
+**The page is built like Shopping** (§8): a heading with the **Done folder** and a **Categories**
+button (where Shopping has Manage lists); one collapsible card per category, each with its own
+**"Add a job…"** row; **Other** last; and a dashed **"New category"** box at the bottom, as Shopping's
+"New list". There is no page-level +. A job is added by name into the card it belongs in, undated;
+its date, time, repeat, alert and category are set by tapping it, which opens the job sheet. Both
+add controls follow §19: `.waiting` when empty, a stated hint if tapped anyway, a named failure.
+
+### Categories
+
+Each page has its own categories — `house_job_categories` (shared with the household) and
+`my_job_categories` (private to the login), the same split as the two job tables. A job's
+`category_id` names one; `''`/NULL is **Other**. `lib/jobGroups.ts` `groupJobs()` is the one
+definition of what the page shows, and `scripts/verify-job-categories.ts` holds it:
+
+- **One card per category, in the dragged category order, then Other.**
+- 🚨 **An empty category hides itself, exactly as a shopping list does** (§8): unless it is
+  **starred** (`is_default`, set in Categories as Manage lists sets it) or has **never held a job**
+  (`never_had_items`, cleared the first time a job is added or moved into it). Without the second
+  clause a category made from the "New category" box would vanish the moment it was made.
+  🚨 "Never held a job" also needs **no job, open or done, to name it** (`usedCategoryIds()`), and
+  **unstarring clears `never_had_items`** in the same statement: every category that existed before
+  `20261005120000` was given `true` by default, so without both, an emptied old category stays on
+  screen as "new" — and taking its star off would visibly do nothing. "Empty"
+  means no open job — done jobs are in the folder. A hidden category still exists: Categories lists
+  it ("empty · hidden"), and the job sheet offers it, which brings it back. A starred or new empty
+  card says "Nothing in Garden yet.". **Other is not a row**: no
+  grip, no rename, no delete, always last, and absent when it holds nothing — it is where jobs from
+  before categories wait to be filed, and it goes once they all have been. A job added in Other's
+  own add row has no category.
+- 🚨 **A job naming a category that does not exist here reads as Other.** Another phone can delete a
+  category while this one files a job under it. Dropping such a job from every group would make it
+  vanish from the page.
+- **Inside a card: dated jobs first, soonest first** (`sortOpenJobs`, the order the page always had),
+  **then undated jobs in their dragged order.** 🚨 Only undated jobs carry a grip: a dragged dated
+  job would be put straight back by the date sort. `reorderJobs` is handed the card's undated ids
+  *as rendered*, so the write and the screen agree on the siblings, orphans included.
+- **Categories reorder by the grip on their card header**, like shopping lists (§8, §17), with the
+  same `data-drag-list` attribute because each card contains job rows. Other is outside that list.
+  🚨 **The drag is among the visible categories and the write among all of them**, through the same
+  `fullIndexForVisibleMove()` as lists, so a hidden category keeps its place.
+- **A card's open/closed state is per device** (§6). 🚨 **A tapped reminder or due-soon banner opens
+  its job's card**, rendering it open and remembering it open: a collapsed card renders no rows,
+  so the flash (§13) would otherwise land on nothing, silently. `isGroupOpen()` carries the
+  override, with a control in the verify script. The effect that remembers it is safe only because
+  `setCategoryOpen` is stable and opening an open card returns the same state.
+- **Changing a job's category** is in the job sheet, the way an item moves between lists (§11):
+  chips for the page's categories plus **Other**, the current one pressed, then "…or name a new
+  category". Picking one clears the other. The change is its own narrow write (`category_id` +
+  `position`), landing the job at the end of its new card.
+- 🚨 **A new category is written and awaited before the job names it.** The server's guard (below)
+  nulls a category that is not there yet, and uploads go in local write order (`docs/ARCHITECTURE.md`).
+- **Manage categories** (`components/ManageCategoriesSheet.tsx`): every category, hidden ones
+  included — star, add, rename in place (saved on blur or Enter), delete. **Deleting a category deletes no job**: its jobs move to Other in the same
+  write, child-first, and the sheet says so before a category with jobs goes.
+- 🚨 **No foreign key on `category_id`, and no unique name** (`silver-octo-invention/docs/listly-SUPABASE.md`,
+  *Job categories*). Two offline phones can leave a dangling id or two "Garden"s; either constraint
+  would turn that into a write PowerSync discards silently. A guard trigger nulls a category the job
+  may not use — another household's, another login's, or a missing one.
+
+**Done is a folder, not a section.** The folder button carries a brown count of that page's done
+jobs and opens `components/DoneSheet.tsx`: done jobs newest first (by `done_at`), each with a ticked
+box that moves it back. The sheet stays open, so several can come back in a row. The count is
+brown, not red: done is not an alert. With nothing done the folder is `.waiting` and a tap says so
+(§19). A recurring job never arrives here — ticking it moves it on (below).
 
 **House jobs is hidden when the household has exactly one member** (Adam, 2026-09-25), read from
 the synced `lst_ref_household_members` mirror, and its banners (§13) with it. Exactly one: zero
@@ -720,7 +799,8 @@ own `?tab=…&job=…` (`lib/openIntent.ts` `jobOpenUrl()`) and `App.tsx` hands 
 `apply()` → `parseOpen()` the notification goes through, so the two cannot land in different
 places. The whole banner takes the tap — padding and icon included — and its text is a real
 `<button>` (`.alert-open`, reset to look like plain text) so a keyboard or screen reader can reach
-it. **Opening does not dismiss**: looking at a job is not dealing with it, so the banner stays
+it. **If the job's category is collapsed on this phone, its card opens** (§12): a collapsed card renders
+no row to flash. **Opening does not dismiss**: looking at a job is not dealing with it, so the banner stays
 until the job is ticked or ✕ is tapped.
 
 > 🚨 **✕ sits inside the tappable banner, so its handler calls `stopPropagation()` before
@@ -843,6 +923,13 @@ apps above, which insert one shared indicator element; React just does it declar
 
 Reordering writes a `position` (a `double precision`): append gets last + 1, a mid-list insert the
 midpoint of its neighbours, and **a delete never renumbers**.
+
+**A reorder whose rows contain another reorder's rows names its own row attribute.** The hook
+measures every `[data-drag-row]` in its container at drag start; shopping list cards contain item
+rows carrying that attribute, so the list reorder passes `'data-drag-list'` instead, or every item
+in an open card would be measured as a landing slot. Between cards the cursor is
+`.drop-cursor.between`, whose margins give it a net height of zero inside the 14px gap, so drawing
+it moves no card and the measured midpoints stay true.
 
 ---
 
@@ -983,6 +1070,8 @@ that reason (`lib/shopConfirmation.ts`, `pushState.ts`, `syncHealth.ts`, `accoun
 | `verify-sync-health.ts` | the dot and the panel's one answer; a stale upload error is not a failure (§18) |
 | `verify-account-switch.ts` | a different account clears the device; Sync now waits for both directions (§18) |
 | `verify-due-soon-banners.ts` | one banner at a time, soonest first, and a count that matches what ✕ can reveal (§13) |
+| `verify-job-categories.ts` | the page's cards, Other last, orphans in Other, dated-then-dragged order, a reminder opening a collapsed card, and the category in `jobColumns()` (§12) |
+| `verify-list-reorder.ts` | a list dragged among the visible lists lands there, and hidden lists keep their places (§8, §17) |
 | `verify-banner-opens-job.ts` | a tapped banner opens its job's tab and flashes it through the notification's path, and ✕ only dismisses (§13) |
 
 **UI changes are checked by rendering the real components**, not by reading them: a throwaway Vite

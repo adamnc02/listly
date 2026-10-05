@@ -95,7 +95,7 @@
   --alert-bg: #F5CEC8;     /* due-soon banner fill: deeper than --chip-soon-bg,
                              which is too close to --ground to read as a fill.
                              --chip-soon-ink on it is 5.18:1 */
-  --done-card: #EFE7DB;    /* the Done section's background */
+  --done-card: #EFE7DB;    /* the Done folder button's background */
   --done-item: #8C7C6E;    /* ticked shopping items */
   --done-job: #7E6E60;     /* done jobs, struck through */
   --pill-ink: #5C7A4C;     /* count-pill text on --sage-wash */
@@ -368,10 +368,14 @@ main {
 }
 
 /* ---------- shopping lists ---------- */
-.listhead {
-  width: 100%;
+/* The header is the grip plus the toggle, side by side: the grip is never
+   inside the button, so a long-press to drag cannot also open the card. */
+.listhead { display: flex; align-items: stretch; }
+.listhead > .grip { width: 30px; padding-left: 8px; align-items: center; }  /* lines up with the item grips below */
+.listtoggle {
+  flex: 1; min-width: 0;
   display: flex; align-items: center; gap: 10px;
-  padding: 12px 16px;
+  padding: 12px 16px 12px 4px;
   min-height: 60px;
   background: transparent;
   border: none;
@@ -388,8 +392,7 @@ main {
 }
 .defmark { color: var(--brown); display: flex; }
 .chev { transition: transform .2s; flex-shrink: 0; }
-.open > .listhead .chev,
-.open > .donehead .chev { transform: rotate(90deg); }
+.open > .listhead .chev { transform: rotate(90deg); }
 .listbody {
   border-top: 1.5px dashed var(--line);
   padding: 6px 8px 12px;
@@ -434,6 +437,12 @@ main {
   background: var(--sage);
   box-shadow: 0 0 0 2px var(--paper);
 }
+
+/* Between list cards the cursor sits in the 14px .stack gap with a net
+   height of zero (3px tall, -8.5px above, +5.5px below), so drawing it moves
+   no card — the midpoints measured at drag start stay true. */
+.drop-cursor.between { margin: -8.5px 0 5.5px; }
+.card.dragging { opacity: .35; }
 
 .rows-dragging { touch-action: none; user-select: none; -webkit-user-select: none; }
 
@@ -529,6 +538,12 @@ main {
 .empty { text-align: center; padding: 24px 12px; font-size: 24px; color: var(--muted); }
 
 /* ---------- jobs ---------- */
+/* Job categories are cards in the shopping-list design (.listhead,
+   .listtoggle, .listbody). Other, and every dated job, has no grip; the
+   spacer keeps names in one column with the rows that do. */
+.grip-space { width: 22px; flex-shrink: 0; }
+.listhead > .grip-space { width: 30px; }
+.jobcat .listbody { padding-top: 4px; }
 .jobform { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
 .jobform .line-input { width: 100%; font-size: 26px; }
 input[type=date], input[type=time] {
@@ -569,20 +584,28 @@ input[type=date], input[type=time] {
 .chip.soon { background: var(--chip-soon-bg); color: var(--chip-soon-ink); }
 .bell { color: var(--bell-off); }
 .bell[aria-pressed=true] { color: #fff; background: var(--sage); }
-.done-card { background: var(--done-card); }
-.donehead {
-  width: 100%;
-  display: flex; align-items: center; gap: 10px;
-  padding: 10px 16px;
-  min-height: 52px;
-  background: transparent;
-  border: none;
-  color: var(--soft);
-  text-align: left;
+/* Done: a folder in the page heading with a count, opening a sheet
+   (DoneSheet). The count is brown, not red — done is not an alert — and
+   uses .alert-count's shape and --ground ring so it reads as a badge. */
+.done-btn { position: relative; background: var(--done-card); color: var(--soft); }
+.done-count,
+.pagehead .done-count {   /* .pagehead span would otherwise grey the number out */
+  position: absolute;
+  top: -6px; right: -6px;
+  min-width: 24px; height: 24px;
+  padding: 0 6px;
+  border-radius: 12px;
+  background: var(--brown);
+  color: #fff;
+  font-size: 17px; font-weight: 700;
+  line-height: 24px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 0 0 2px var(--ground);
+  pointer-events: none;
 }
-.donehead .name { font-size: 26px; font-weight: 700; flex: 1; }
-.donetext { font-size: 24px; color: var(--done-job); text-decoration: line-through; padding-left: 4px; }
-.done-card .row { background: transparent; }
+.done-list { display: flex; flex-direction: column; }
+.donetext { font-size: 24px; color: var(--done-job); text-decoration: line-through; padding-left: 4px; overflow-wrap: anywhere; min-width: 0; }
 
 /* ---------- tab bar: a FLOATING PILL ----------
    Ported from BLOC's #nav (PROMPT-03 §2.7, Adam on device 2026-09-20). The
@@ -863,6 +886,18 @@ html[data-keyboard='open'] .edge-fade-bottom { display: none; }
 }
 .mrow .nm { font-size: 26px; font-weight: 700; line-height: 1.1; }
 .mrow .st { font-size: 18px; color: var(--muted); }
+/* A category's name, renamed in place (ManageCategoriesSheet): reads as the
+   .nm text until tapped, then shows the field's underline. */
+.nm-input {
+  width: 100%; min-width: 0;
+  min-height: 44px;
+  border: none; border-bottom: 2px solid transparent;
+  background: transparent;
+  font: inherit; font-size: 26px; font-weight: 700; line-height: 1.1; color: var(--ink);
+  padding: 0;
+  outline: none;
+}
+.nm-input:focus { border-bottom-color: var(--line-2); }
 .star { color: var(--grip); }
 .star[aria-pressed=true] { color: var(--brown); }
 .del { color: var(--red); }

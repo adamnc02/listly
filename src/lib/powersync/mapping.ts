@@ -1,4 +1,4 @@
-import type { IsoDate, Item, Job, JobPage, List } from '../../types'
+import type { IsoDate, Item, Job, JobCategory, JobPage, List } from '../../types'
 
 /**
  * The mapping boundary: PowerSync's flat SQLite rows ↔ the app's types.
@@ -73,6 +73,15 @@ export function rowToJob(row: Row, page: JobPage): Job {
     repeat: fromDbId(row.repeat_rule),
     alertOffset: fromDbId(row.alert_offset),
     alertTime: fromDbId(row.alert_time),
+    doneAt: fromDbId(row.done_at),
+    categoryId: fromDbId(row.category_id),
+  }
+}
+
+export function rowToJobCategory(row: Row, page: JobPage): JobCategory {
+  return {
+    id: str(row.id), page, name: str(row.name),
+    isDefault: bool(row.is_default), neverHadJobs: bool(row.never_had_items),
   }
 }
 

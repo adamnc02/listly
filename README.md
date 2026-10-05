@@ -213,6 +213,19 @@ due-chip red: white on that fill is unreadable (`TECHNICAL.md` §13).
 job's reminder notification. It does not dismiss the banner; only ✕ does, and ✕ must keep
 stopping its tap from reaching the banner, or every dismiss also jumps tabs.
 
+### A job's category has no foreign key, and a new category is written first.
+
+House jobs and To-Do are grouped into categories, each a collapsible card, with **Other** last
+(`TECHNICAL.md` §12). `category_id` deliberately has **no foreign key and no unique name**: two
+offline phones can delete a category while filing a job under it, or both create "Garden", and
+either constraint would make PowerSync discard the write silently. A database guard turns a
+category the job may not use into Other instead, and the app reads a job naming a missing category
+as Other — **don't add the FK "for integrity"**.
+
+The guard also nulls a category that has not arrived yet, so **a new category is written, and
+awaited, before any job names it** — uploads go in local write order. And a tapped reminder **opens
+its job's card** even if it is collapsed on this phone, or the flash would land on nothing.
+
 ## Running it
 
 ```bash

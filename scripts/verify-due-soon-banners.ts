@@ -30,7 +30,7 @@ const inDays = (n: number) => {
   return toLocalIsoDate(d)
 }
 const job = (id: string, page: Job['page'], due: string, done = false): Job => ({
-  id, page, text: id, due, done, remind: false, dueTime: '', repeat: '', alertOffset: '', alertTime: '',
+  id, page, text: id, due, done, remind: false, dueTime: '', repeat: '', alertOffset: '', alertTime: '', doneAt: '',
 })
 
 const jobs: Job[] = [

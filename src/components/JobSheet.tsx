@@ -50,10 +50,21 @@ function toggleIn<T>(list: T[], value: T): T[] {
  *   - A repeat needs a date to repeat from, so Repeat only shows with one.
  */
 export function JobSheet({ page, jobId, onClose }: { page: JobPage; jobId: string | null; onClose: () => void }) {
-  const { jobs, addJob, saveJob, deleteJob } = useListly()
+  const { jobs, addJob, saveJob, deleteJob, jobCategories, addJobCategory } = useListly()
   const job = jobId ? jobs.find((j) => j.id === jobId) : undefined
+  const categories = jobCategories.filter((c) => c.page === page)
 
-  const [draft, setDraft] = useState<JobDraft>(() => (job ? { ...job } : { ...EMPTY_DRAFT }))
+  // A category deleted on the other phone reads as Other (lib/jobGroups.ts),
+  // so the sheet starts from Other too rather than from an id that names
+  // nothing.
+  const [draft, setDraft] = useState<JobDraft>(() => {
+    const start = job ? { ...job } : { ...EMPTY_DRAFT }
+    return categories.some((c) => c.id === start.categoryId) ? start : { ...start, categoryId: '' }
+  })
+  // Filing under a NEW category. Mutually exclusive with picking one, the
+  // same as ItemEditSheet's "…or name a new list": either is a destination,
+  // and allowing both would make "which wins?" a guess.
+  const [newCategory, setNewCategory] = useState('')
   const [preset, setPreset] = useState<Preset>(() => (job ? presetOf(job.repeat, job.due) : 'never'))
   const [custom, setCustom] = useState<Rule | null>(() =>
     job && presetOf(job.repeat, job.due) === 'custom' ? parseRule(job.repeat) : null,
@@ -85,14 +96,16 @@ export function JobSheet({ page, jobId, onClose }: { page: JobPage; jobId: strin
       return
     }
     const final: JobDraft = { ...draft, repeat: repeatRule }
-    if (job) {
-      saveJob(job.id, final)
+    // 🚨 A new category is written and AWAITED before the job names it.
+    // Uploads go in local write order, and the database guard nulls a job
+    // whose category is not there yet — the job would sit in Other on the
+    // server while showing in its category on this phone.
+    void (async () => {
+      if (newCategory.trim()) final.categoryId = await addJobCategory(page, newCategory)
+      if (job) saveJob(job.id, final)
+      else await addJob(page, final)
       onClose()
-      return
-    }
-    void addJob(page, final)
-      .then(onClose)
-      .catch((e: unknown) => setHint(`Couldn't add it: ${e instanceof Error ? e.message : String(e)}`))
+    })().catch((e: unknown) => setHint(`Couldn't save it: ${e instanceof Error ? e.message : String(e)}`))
   }
 
   if (step === 'custom' && custom) {
@@ -123,6 +136,38 @@ export function JobSheet({ page, jobId, onClose }: { page: JobPage; jobId: strin
         placeholder="What needs doing?"
         aria-label="Name"
         autoFocus={!job}
+      />
+
+      <div className="lbl">Category</div>
+      <div className="chips">
+        {categories.map((c) => (
+          <button
+            key={c.id}
+            aria-pressed={!newCategory && draft.categoryId === c.id}
+            onClick={() => {
+              set({ categoryId: c.id })
+              setNewCategory('')
+            }}
+          >
+            {c.name}
+          </button>
+        ))}
+        <button
+          aria-pressed={!newCategory && !draft.categoryId}
+          onClick={() => {
+            set({ categoryId: '' })
+            setNewCategory('')
+          }}
+        >
+          Other
+        </button>
+      </div>
+      <input
+        className="newname"
+        value={newCategory}
+        onChange={(e) => setNewCategory(e.target.value)}
+        placeholder="…or name a new category"
+        aria-label="File under a new category"
       />
 
       {/* Every value here can be cleared with a real button. A native date or
@@ -218,7 +263,7 @@ export function JobSheet({ page, jobId, onClose }: { page: JobPage; jobId: strin
         </>
       )}
 
-      {hint && !draft.text.trim() && (
+      {hint && (!draft.text.trim() || hint.startsWith('Couldn')) && (
         <p className="help" style={{ color: 'var(--red)' }} role="alert">
           {hint}
         </p>

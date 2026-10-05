@@ -80,6 +80,8 @@ export interface JobColumns {
   remind: 0 | 1
   alert_offset: string | null
   alert_time: string | null
+  /** '' (Other) is written as NULL, like every id-shaped column. */
+  category_id: string | null
 }
 
 /**
@@ -98,7 +100,10 @@ export interface JobColumns {
 export function jobColumns(draft: JobDraft): JobColumns {
   const text = draft.text.trim()
   if (!draft.due) {
-    return { text, due_date: null, due_time: null, repeat_rule: null, remind: 0, alert_offset: null, alert_time: null }
+    return {
+      text, due_date: null, due_time: null, repeat_rule: null, remind: 0, alert_offset: null, alert_time: null,
+      category_id: draft.categoryId || null,
+    }
   }
   const dueTime = isHhMm(draft.dueTime) ? draft.dueTime : ''
   const alert = normaliseAlert(draft.alertOffset, draft.alertTime, dueTime)
@@ -110,12 +115,13 @@ export function jobColumns(draft: JobDraft): JobColumns {
     remind: draft.remind ? 1 : 0,
     alert_offset: alert.offset || null,
     alert_time: alert.time || null,
+    category_id: draft.categoryId || null,
   }
 }
 
 /** A job the sheet has not touched yet: the bell comes on with a date (Q10). */
 export const EMPTY_DRAFT: JobDraft = {
-  text: '', due: '', dueTime: '', repeat: '', remind: false, alertOffset: '', alertTime: '',
+  text: '', due: '', dueTime: '', repeat: '', remind: false, alertOffset: '', alertTime: '', categoryId: '',
 }
 
 /**
