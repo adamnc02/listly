@@ -14,8 +14,11 @@ import { sortOpenJobs } from './jobs'
  *
  * 🚨 An EMPTY category hides itself, exactly as a shopping list does
  * (TECHNICAL.md §8): unless it is starred (`isDefault`), or has never held a
- * job (`neverHadJobs`) — without that second clause a category made from
- * the page's "New category" box would vanish the moment it was made. A
+ * job — without that second clause a category made from the page's "New
+ * category" box would vanish the moment it was made. "Never held a job" is
+ * `neverHadJobs` AND no job, open or done, names it: every category that
+ * existed before the flag did was given `true`, and a done job filed under
+ * it is the evidence it has been used. (`usedCategoryIds` below.) A
  * hidden category still exists: Categories lists it, and the job sheet can
  * file a job under it, which brings it back. "Empty" means no OPEN job;
  * done jobs live in the Done folder.
@@ -53,12 +56,23 @@ export function groupJobs(page: JobPage, jobs: readonly Job[], categories: reado
       undated: members.filter((j) => !j.due),
     }
   }
+  const used = usedCategoryIds(page, jobs)
   const groups = mine
     .map(build)
-    .filter((g) => g.dated.length + g.undated.length > 0 || g.category?.isDefault || g.category?.neverHadJobs)
+    .filter(
+      (g) =>
+        g.dated.length + g.undated.length > 0 ||
+        g.category?.isDefault ||
+        (g.category?.neverHadJobs && !used.has(g.category.id)),
+    )
   const other = build(null)
   if (other.dated.length + other.undated.length > 0) groups.push(other)
   return groups
+}
+
+/** Categories some job on this page names, open OR done. */
+export function usedCategoryIds(page: JobPage, jobs: readonly Job[]): Set<string> {
+  return new Set(jobs.filter((j) => j.page === page && j.categoryId).map((j) => j.categoryId))
 }
 
 /** The group key a job renders under — what a tapped reminder must expand. */

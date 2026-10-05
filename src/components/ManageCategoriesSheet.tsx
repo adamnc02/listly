@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { JobPage } from '../types'
 import { useListly } from '../context/ListlyContext'
+import { usedCategoryIds } from '../lib/jobGroups'
 import { Sheet } from './Sheet'
 import { Star, StarFilled, Trash } from './Icons'
 
@@ -24,6 +25,7 @@ export function ManageCategoriesSheet({ page, onClose }: { page: JobPage; onClos
   // Names being edited, keyed by id; saved on blur or Enter.
   const [names, setNames] = useState<Record<string, string>>({})
 
+  const used = usedCategoryIds(page, jobs)
   const openIn = (id: string) => jobs.filter((j) => j.page === page && !j.done && j.categoryId === id).length
 
   const submit = () => {
@@ -62,7 +64,7 @@ export function ManageCategoriesSheet({ page, onClose }: { page: JobPage; onClos
             ? `${n} to do`
             : c.isDefault
               ? 'empty · always shown'
-              : c.neverHadJobs
+              : c.neverHadJobs && !used.has(c.id)
                 ? 'empty · shown until it’s used'
                 : 'empty · hidden'
           return (

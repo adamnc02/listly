@@ -650,7 +650,11 @@ definition of what the page shows, and `scripts/verify-job-categories.ts` holds 
 - 🚨 **An empty category hides itself, exactly as a shopping list does** (§8): unless it is
   **starred** (`is_default`, set in Categories as Manage lists sets it) or has **never held a job**
   (`never_had_items`, cleared the first time a job is added or moved into it). Without the second
-  clause a category made from the "New category" box would vanish the moment it was made. "Empty"
+  clause a category made from the "New category" box would vanish the moment it was made.
+  🚨 "Never held a job" also needs **no job, open or done, to name it** (`usedCategoryIds()`), and
+  **unstarring clears `never_had_items`** in the same statement: every category that existed before
+  `20261005120000` was given `true` by default, so without both, an emptied old category stays on
+  screen as "new" — and taking its star off would visibly do nothing. "Empty"
   means no open job — done jobs are in the folder. A hidden category still exists: Categories lists
   it ("empty · hidden"), and the job sheet offers it, which brings it back. A starred or new empty
   card says "Nothing in Garden yet.". **Other is not a row**: no

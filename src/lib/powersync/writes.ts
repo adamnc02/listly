@@ -416,8 +416,20 @@ export async function insertJobCategory(page: JobPage, householdId: string, name
   return id
 }
 
+/**
+ * The star. 🚨 UNstarring also clears never_had_items: taking the star off
+ * is a decision that the category may hide when empty, so it must not be
+ * kept on screen by "it's new" — which every category that existed before
+ * 20261005120000 was given by default. One statement, so the two columns
+ * cannot be seen half-written.
+ */
 export async function setJobCategoryDefault(page: JobPage, id: string, isDefault: boolean): Promise<void> {
-  await powerSyncDb.execute(`UPDATE ${CATEGORY_TABLE[page]} SET is_default = ? WHERE id = ?`, [isDefault ? 1 : 0, id])
+  await powerSyncDb.execute(
+    isDefault
+      ? `UPDATE ${CATEGORY_TABLE[page]} SET is_default = 1 WHERE id = ?`
+      : `UPDATE ${CATEGORY_TABLE[page]} SET is_default = 0, never_had_items = 0 WHERE id = ?`,
+    [id],
+  )
 }
 
 /** A category that has now held a job hides when emptied, like a list. The
