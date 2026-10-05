@@ -646,8 +646,14 @@ Each page has its own categories — `house_job_categories` (shared with the hou
 `category_id` names one; `''`/NULL is **Other**. `lib/jobGroups.ts` `groupJobs()` is the one
 definition of what the page shows, and `scripts/verify-job-categories.ts` holds it:
 
-- **One card per category, in the dragged category order, then Other.** A category card shows even
-  when empty ("Nothing in Garden yet."), so it can be filled or deleted. **Other is not a row**: no
+- **One card per category, in the dragged category order, then Other.**
+- 🚨 **An empty category hides itself, exactly as a shopping list does** (§8): unless it is
+  **starred** (`is_default`, set in Categories as Manage lists sets it) or has **never held a job**
+  (`never_had_items`, cleared the first time a job is added or moved into it). Without the second
+  clause a category made from the "New category" box would vanish the moment it was made. "Empty"
+  means no open job — done jobs are in the folder. A hidden category still exists: Categories lists
+  it ("empty · hidden"), and the job sheet offers it, which brings it back. A starred or new empty
+  card says "Nothing in Garden yet.". **Other is not a row**: no
   grip, no rename, no delete, always last, and absent when it holds nothing — it is where jobs from
   before categories wait to be filed, and it goes once they all have been. A job added in Other's
   own add row has no category.
@@ -660,6 +666,8 @@ definition of what the page shows, and `scripts/verify-job-categories.ts` holds 
   *as rendered*, so the write and the screen agree on the siblings, orphans included.
 - **Categories reorder by the grip on their card header**, like shopping lists (§8, §17), with the
   same `data-drag-list` attribute because each card contains job rows. Other is outside that list.
+  🚨 **The drag is among the visible categories and the write among all of them**, through the same
+  `fullIndexForVisibleMove()` as lists, so a hidden category keeps its place.
 - **A card's open/closed state is per device** (§6). 🚨 **A tapped reminder or due-soon banner opens
   its job's card**, rendering it open and remembering it open: a collapsed card renders no rows,
   so the flash (§13) would otherwise land on nothing, silently. `isGroupOpen()` carries the
@@ -671,8 +679,8 @@ definition of what the page shows, and `scripts/verify-job-categories.ts` holds 
   `position`), landing the job at the end of its new card.
 - 🚨 **A new category is written and awaited before the job names it.** The server's guard (below)
   nulls a category that is not there yet, and uploads go in local write order (`docs/ARCHITECTURE.md`).
-- **Manage categories** (`components/ManageCategoriesSheet.tsx`): add, rename in place (saved on
-  blur or Enter), delete. **Deleting a category deletes no job**: its jobs move to Other in the same
+- **Manage categories** (`components/ManageCategoriesSheet.tsx`): every category, hidden ones
+  included — star, add, rename in place (saved on blur or Enter), delete. **Deleting a category deletes no job**: its jobs move to Other in the same
   write, child-first, and the sheet says so before a category with jobs goes.
 - 🚨 **No foreign key on `category_id`, and no unique name** (`silver-octo-invention/docs/listly-SUPABASE.md`,
   *Job categories*). Two offline phones can leave a dangling id or two "Garden"s; either constraint

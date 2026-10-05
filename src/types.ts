@@ -81,13 +81,19 @@ export interface Job {
   categoryId: string
 }
 
-/** A House jobs or To-Do category (TECHNICAL.md §12). Each page has its own:
+/** A House jobs or To-Do category (TECHNICAL.md §12). Hides when empty unless
+ *  starred or never yet used — the shopping-list rule. Each page has its own:
  *  `house_job_categories` is shared with the household, `my_job_categories`
  *  is private to the login, exactly like the two job tables. */
 export interface JobCategory {
   id: string
   page: JobPage
   name: string
+  /** The star: shows even when empty. Same rule as `List.isDefault`. */
+  isDefault: boolean
+  /** Has never held a job, so a just-made category stays visible while
+   *  empty. Same rule, and same reason, as `List.neverHadItems`. */
+  neverHadJobs: boolean
 }
 
 /** Everything the create/edit sheet saves in one go (TECHNICAL.md §12). */

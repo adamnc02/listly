@@ -291,6 +291,7 @@ export async function insertJob(page: JobPage, householdId: string, draft: JobDr
       [id, ...cols],
     )
   }
+  await markCategoryUsed(page, draft.categoryId)
   return id
 }
 
@@ -366,6 +367,7 @@ export async function setJobCategory(page: JobPage, householdId: string, id: str
   await powerSyncDb.execute(`UPDATE ${table} SET category_id = ?, position = ? WHERE id = ?`, [
     toDbId(categoryId), pos, id,
   ])
+  await markCategoryUsed(page, categoryId)
 }
 
 /**
@@ -400,14 +402,32 @@ export async function insertJobCategory(page: JobPage, householdId: string, name
   const table = CATEGORY_TABLE[page]
   if (page === 'house') {
     const pos = appendPosition(await siblings(`SELECT position FROM ${table} WHERE household_id = ?`, [householdId]))
-    await powerSyncDb.execute(`INSERT INTO ${table} (id, household_id, name, position) VALUES (?, ?, ?, ?)`, [
-      id, householdId, name, pos,
-    ])
+    await powerSyncDb.execute(
+      `INSERT INTO ${table} (id, household_id, name, is_default, never_had_items, position) VALUES (?, ?, ?, 0, 1, ?)`,
+      [id, householdId, name, pos],
+    )
   } else {
     const pos = appendPosition(await siblings(`SELECT position FROM ${table}`, []))
-    await powerSyncDb.execute(`INSERT INTO ${table} (id, name, position) VALUES (?, ?, ?)`, [id, name, pos])
+    await powerSyncDb.execute(
+      `INSERT INTO ${table} (id, name, is_default, never_had_items, position) VALUES (?, ?, 0, 1, ?)`,
+      [id, name, pos],
+    )
   }
   return id
+}
+
+export async function setJobCategoryDefault(page: JobPage, id: string, isDefault: boolean): Promise<void> {
+  await powerSyncDb.execute(`UPDATE ${CATEGORY_TABLE[page]} SET is_default = ? WHERE id = ?`, [isDefault ? 1 : 0, id])
+}
+
+/** A category that has now held a job hides when emptied, like a list. The
+ *  same narrow, conditional write as shopping_lists.never_had_items. */
+async function markCategoryUsed(page: JobPage, categoryId: string): Promise<void> {
+  if (!categoryId) return
+  await powerSyncDb.execute(
+    `UPDATE ${CATEGORY_TABLE[page]} SET never_had_items = 0 WHERE id = ? AND never_had_items = 1`,
+    [categoryId],
+  )
 }
 
 export async function renameJobCategory(page: JobPage, id: string, name: string): Promise<void> {

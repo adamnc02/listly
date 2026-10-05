@@ -13,6 +13,9 @@
  *   - 🚨 A tapped reminder opening a job whose category is COLLAPSED on this
  *     phone: no row is rendered, so nothing flashes, silently. The control
  *     below is the open rule without the flash override.
+ *   - An empty category that should hide still showing, or one that should
+ *     show (starred, or just made) hiding — the shopping-list rule (§8),
+ *     with a control that drops the rule.
  *   - A job built without its category: every job row is built by
  *     jobColumns(), and '' (Other) must be written as NULL.
  *
@@ -39,10 +42,12 @@ const job = (id: string, categoryId: string, due = '', done = false, page: Job['
   id, page, text: id, due, done, remind: false, dueTime: '', repeat: '', alertOffset: '', alertTime: '',
   doneAt: '', categoryId,
 })
-const cat = (id: string, page: JobCategory['page'] = 'house'): JobCategory => ({ id, page, name: id })
+const cat = (id: string, page: JobCategory['page'] = 'house', extra: Partial<JobCategory> = {}): JobCategory => ({
+  id, page, name: id, isDefault: false, neverHadJobs: false, ...extra,
+})
 
 // Categories in position order: Garden before Work. Jobs in position order.
-const categories = [cat('garden'), cat('work'), cat('empty'), cat('admin', 'mine')]
+const categories = [cat('garden'), cat('work'), cat('empty', 'house', { isDefault: true }), cat('admin', 'mine')]
 const jobs: Job[] = [
   job('mow', 'garden'),                    // undated, first by position
   job('hedge', 'garden', inDays(5)),       // dated, later
@@ -60,7 +65,23 @@ const keys = groups.map((g) => g.key).join(',')
 
 // ── grouping ───────────────────────────────────────────────────────────────
 check('one group per category, in category order, then Other last', keys === 'garden,work,empty,other:house', keys)
-check('an empty category still shows (it can be filled or deleted)', groups[2]?.dated.length === 0 && groups[2]?.undated.length === 0)
+check('an empty STARRED category still shows', groups[2]?.key === 'empty' && groups[2].dated.length + groups[2].undated.length === 0)
+
+// ── the hide rule (the shopping-list rule, §8) ─────────────────────────────
+const hideCats = [
+  cat('used-empty'),                                   // has held a job, now empty
+  cat('starred-empty', 'house', { isDefault: true }),
+  cat('brand-new', 'house', { neverHadJobs: true }),   // just made from the box
+  cat('busy'),
+]
+const shown = groupJobs('house', [job('x', 'busy')], hideCats).map((g) => g.key).join(',')
+check('🚨 an empty, unstarred, used category hides', !shown.split(',').includes('used-empty'), shown)
+check('an empty STARRED category shows', shown.includes('starred-empty'), shown)
+check('🚨 a just-made category shows until it has held a job', shown.includes('brand-new'), shown)
+check('a category with an open job shows', shown.includes('busy'), shown)
+check('a category holding only DONE jobs counts as empty', !groupJobs('house', [job('d', 'used-empty', '', true)], hideCats).some((g) => g.key === 'used-empty'))
+const noRule = hideCats.map((c) => c.id).join(',')
+check('control: without the rule every category would show', noRule.includes('used-empty') && shown !== noRule, noRule)
 check('the other page’s categories are not on this page', !groups.some((g) => g.category?.id === 'admin'))
 const other = groups[groups.length - 1]
 check('Other holds the uncategorised job', other.undated.some((j) => j.id === 'loose'))

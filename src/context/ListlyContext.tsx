@@ -130,7 +130,11 @@ interface ListlyValue {
   renameJobCategory: (id: string, name: string) => void
   /** Its jobs go to Other; no job is deleted. */
   deleteJobCategory: (id: string) => void
-  reorderJobCategories: (page: JobPage, fromIndex: number, toIndex: number) => void
+  /** Drag among the VISIBLE categories (`visibleIds`, as rendered); hidden
+   *  ones keep their places, as hidden lists do. */
+  reorderJobCategories: (page: JobPage, visibleIds: string[], fromIndex: number, toIndex: number) => void
+  /** The star: an empty starred category still shows. */
+  toggleJobCategoryDefault: (id: string) => void
   /** Reorder an UNDATED job among `groupIds`, its group's undated jobs as
    *  rendered. Dated jobs sort by date and do not reorder. */
   reorderJobs: (page: JobPage, groupIds: string[], fromIndex: number, toIndex: number) => void
@@ -512,12 +516,22 @@ export function ListlyProvider({ children }: { children: ReactNode }) {
   )
 
   const reorderJobCategories = useCallback(
-    (page: JobPage, fromIndex: number, toIndex: number) => {
+    (page: JobPage, visibleIds: string[], fromIndex: number, toIndex: number) => {
       if (fromIndex === toIndex) return
-      const cat = jobCategories.filter((c) => c.page === page)[fromIndex]
-      if (cat) run(writes.repositionJobCategory(page, householdId, cat.id, toIndex))
+      const id = visibleIds[fromIndex]
+      if (!id) return
+      const allIds = jobCategories.filter((c) => c.page === page).map((c) => c.id)
+      run(writes.repositionJobCategory(page, householdId, id, fullIndexForVisibleMove(allIds, visibleIds, fromIndex, toIndex)))
     },
     [householdId, jobCategories],
+  )
+
+  const toggleJobCategoryDefault = useCallback(
+    (id: string) => {
+      const cat = findCategory(id)
+      if (cat) run(writes.setJobCategoryDefault(cat.page, id, !cat.isDefault))
+    },
+    [findCategory],
   )
 
   const reorderJobs = useCallback((page: JobPage, groupIds: string[], fromIndex: number, toIndex: number) => {
@@ -538,6 +552,7 @@ export function ListlyProvider({ children }: { children: ReactNode }) {
       jobsFor, addJob, toggleJob, toggleRemind, saveJob, deleteJob, householdSize,
       dismissBanner,
       jobCategories, addJobCategory, renameJobCategory, deleteJobCategory, reorderJobCategories, reorderJobs,
+      toggleJobCategoryDefault,
       setCategoryOpen,
       ledgerGateOpen, categories, locationOptions, setListCategory,
       saveShopCompletion, failedCompletions, retryLedger,
@@ -549,6 +564,7 @@ export function ListlyProvider({ children }: { children: ReactNode }) {
       jobsFor, addJob, toggleJob, toggleRemind, saveJob, deleteJob, householdSize,
       dismissBanner,
       jobCategories, addJobCategory, renameJobCategory, deleteJobCategory, reorderJobCategories, reorderJobs,
+      toggleJobCategoryDefault,
       setCategoryOpen,
       ledgerGateOpen, categories, locationOptions, setListCategory,
       saveShopCompletion, failedCompletions, retryLedger,

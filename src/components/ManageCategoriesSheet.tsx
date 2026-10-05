@@ -2,20 +2,22 @@ import { useState } from 'react'
 import type { JobPage } from '../types'
 import { useListly } from '../context/ListlyContext'
 import { Sheet } from './Sheet'
-import { Trash } from './Icons'
+import { Star, StarFilled, Trash } from './Icons'
 
 const TITLE: Record<JobPage, string> = { house: 'House jobs', mine: 'To-Do' }
 
 /**
- * Manage categories (TECHNICAL.md §12): one page's categories — add, rename,
- * delete. Their ORDER is dragged on the page itself, by each category's grip,
+ * Manage categories (TECHNICAL.md §12): one page's categories — star, add,
+ * rename, delete. Like Manage lists, it shows EVERY category, the hidden
+ * empty ones included: this is where a hidden one is found again. Their ORDER is dragged on the page itself, by each category's grip,
  * the same way shopping lists are.
  *
  * Deleting a category never deletes a job: its jobs move to Other. That is
  * said before it happens, because the jobs visibly move.
  */
 export function ManageCategoriesSheet({ page, onClose }: { page: JobPage; onClose: () => void }) {
-  const { jobs, jobCategories, addJobCategory, renameJobCategory, deleteJobCategory } = useListly()
+  const { jobs, jobCategories, addJobCategory, renameJobCategory, deleteJobCategory, toggleJobCategoryDefault } =
+    useListly()
   const categories = jobCategories.filter((c) => c.page === page)
   const [draft, setDraft] = useState('')
   const [hint, setHint] = useState<string | null>(null)
@@ -49,15 +51,30 @@ export function ManageCategoriesSheet({ page, onClose }: { page: JobPage; onClos
     <Sheet label={`Manage categories — ${TITLE[page]}`} onClose={onClose}>
       <h2>Categories</h2>
       <p className="help">
-        {TITLE[page]}. Tap a name to rename it. Drag categories into order on the page. Jobs with no
-        category sit in Other, at the bottom.
+        {TITLE[page]}. Star a category to keep it showing when empty — others hide themselves when
+        empty. Tap a name to rename it; drag categories into order on the page.
       </p>
 
       <div>
         {categories.map((c) => {
           const n = openIn(c.id)
+          const status = n
+            ? `${n} to do`
+            : c.isDefault
+              ? 'empty · always shown'
+              : c.neverHadJobs
+                ? 'empty · shown until it’s used'
+                : 'empty · hidden'
           return (
             <div className="mrow" key={c.id}>
+              <button
+                className="icon-btn star"
+                onClick={() => toggleJobCategoryDefault(c.id)}
+                aria-pressed={c.isDefault}
+                aria-label={`Keep ${c.name} showing when empty`}
+              >
+                {c.isDefault ? <StarFilled size={22} /> : <Star />}
+              </button>
               <div className="grow">
                 <input
                   className="nm-input"
@@ -69,7 +86,7 @@ export function ManageCategoriesSheet({ page, onClose }: { page: JobPage; onClos
                   }}
                   aria-label={`Rename ${c.name}`}
                 />
-                <div className="st">{n ? `${n} to do` : 'empty'}</div>
+                <div className="st">{status}</div>
               </div>
               <button
                 className="icon-btn del"

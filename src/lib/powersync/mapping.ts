@@ -79,7 +79,10 @@ export function rowToJob(row: Row, page: JobPage): Job {
 }
 
 export function rowToJobCategory(row: Row, page: JobPage): JobCategory {
-  return { id: str(row.id), page, name: str(row.name) }
+  return {
+    id: str(row.id), page, name: str(row.name),
+    isDefault: bool(row.is_default), neverHadJobs: bool(row.never_had_items),
+  }
 }
 
 /** `order by position, id` — the ordering every list is read back with. */

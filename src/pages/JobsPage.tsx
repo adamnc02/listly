@@ -85,7 +85,7 @@ export function JobsPage({
     draggingIndex: catDragging, dropIndex: catDrop, containerRef: catContainer, handleProps: catHandle,
   } = useDragReorder(
     categoryGroups.length,
-    (from, to) => reorderJobCategories(page, from, to),
+    (from, to) => reorderJobCategories(page, categoryGroups.map((g) => g.key), from, to),
     'data-drag-list',
   )
 
@@ -163,8 +163,12 @@ export function JobsPage({
 
       {other && card(other)}
 
-      {openCount === 0 && categoryGroups.length === 0 && (
-        <div className="empty">No categories yet — start one below.</div>
+      {groups.length === 0 && (
+        <div className="empty">
+          {jobCategories.some((c) => c.page === page)
+            ? 'All jobs done. Nice.'
+            : 'No categories yet — start one below.'}
+        </div>
       )}
 
       <div className="newlist">

@@ -12,11 +12,18 @@ import { sortOpenJobs } from './jobs'
  * would be put straight back by the date sort, so offering the drag would be
  * a lie.
  *
+ * 🚨 An EMPTY category hides itself, exactly as a shopping list does
+ * (TECHNICAL.md §8): unless it is starred (`isDefault`), or has never held a
+ * job (`neverHadJobs`) — without that second clause a category made from
+ * the page's "New category" box would vanish the moment it was made. A
+ * hidden category still exists: Categories lists it, and the job sheet can
+ * file a job under it, which brings it back. "Empty" means no OPEN job;
+ * done jobs live in the Done folder.
+ *
  * "Other" is every open job with no category, AND every job naming a
  * category that does not exist here (deleted on the other phone while this
  * one filed a job under it). It is not a row, cannot be renamed or dragged,
- * and is left out entirely when it holds nothing. A real category shows even
- * when empty, so it can be seen, filled and deleted.
+ * and is left out entirely when it holds nothing.
  */
 export interface JobGroup {
   /** Device-state key: the category id, or `other:<page>`. */
@@ -46,7 +53,9 @@ export function groupJobs(page: JobPage, jobs: readonly Job[], categories: reado
       undated: members.filter((j) => !j.due),
     }
   }
-  const groups = mine.map(build)
+  const groups = mine
+    .map(build)
+    .filter((g) => g.dated.length + g.undated.length > 0 || g.category?.isDefault || g.category?.neverHadJobs)
   const other = build(null)
   if (other.dated.length + other.undated.length > 0) groups.push(other)
   return groups

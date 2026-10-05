@@ -99,9 +99,11 @@ export const SYNCED_TABLES: SyncedTable[] = [
   // if the category is not there yet, so a new category must upload first —
   // which, since uploads go in local write order, means the app writes it
   // first (writes.ts insertJobCategory, awaited before the job).
-  own('house_job_categories', { ...H, name: 'text', ...P }),
+  // is_default / never_had_items: the shopping_lists pair (20261005120000).
+  // An empty category hides unless starred or never yet used.
+  own('house_job_categories', { ...H, name: 'text', is_default: 'bool', never_had_items: 'bool', ...P }),
   own('house_jobs', { ...H, ...JOB }),
-  own('my_job_categories', { name: 'text', ...P }, false),
+  own('my_job_categories', { name: 'text', is_default: 'bool', never_had_items: 'bool', ...P }, false),
   // No household_id: my_jobs is private to one login, and that is enforced by
   // the column default, the RLS policy and the stream predicate independently.
   own('my_jobs', { ...JOB }, false),
