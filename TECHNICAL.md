@@ -397,6 +397,15 @@ item (§4). Manage lists is where a hidden list is found again.
 Items reorder by long-press drag (§17). Tapping an item's text opens the item sheet (§11); tapping
 its box ticks it.
 
+**Lists reorder the same way**, by a grip at the left of each card's header. The header is the grip
+and a toggle button side by side; the grip is never inside the button, so a long-press to drag
+cannot also open or close the card. 🚨 **The drag happens among the visible lists, and the write
+lands among all of them**: a hidden list keeps its `position` and reappears where it was.
+`lib/listOrder.ts` `fullIndexForVisibleMove()` maps one onto the other; using the visible index
+directly against the full order drops the list on the wrong side of a hidden one, so a list
+dragged between B and C stays above B. `scripts/verify-list-reorder.ts` carries that version as
+its control.
+
 ---
 
 ## 9. Module: Finish shop
@@ -844,6 +853,13 @@ apps above, which insert one shared indicator element; React just does it declar
 Reordering writes a `position` (a `double precision`): append gets last + 1, a mid-list insert the
 midpoint of its neighbours, and **a delete never renumbers**.
 
+**A reorder whose rows contain another reorder's rows names its own row attribute.** The hook
+measures every `[data-drag-row]` in its container at drag start; shopping list cards contain item
+rows carrying that attribute, so the list reorder passes `'data-drag-list'` instead, or every item
+in an open card would be measured as a landing slot. Between cards the cursor is
+`.drop-cursor.between`, whose margins give it a net height of zero inside the 14px gap, so drawing
+it moves no card and the measured midpoints stay true.
+
 ---
 
 ## 18. Sync visibility: the dot and the diagnostics
@@ -983,6 +999,7 @@ that reason (`lib/shopConfirmation.ts`, `pushState.ts`, `syncHealth.ts`, `accoun
 | `verify-sync-health.ts` | the dot and the panel's one answer; a stale upload error is not a failure (§18) |
 | `verify-account-switch.ts` | a different account clears the device; Sync now waits for both directions (§18) |
 | `verify-due-soon-banners.ts` | one banner at a time, soonest first, and a count that matches what ✕ can reveal (§13) |
+| `verify-list-reorder.ts` | a list dragged among the visible lists lands there, and hidden lists keep their places (§8, §17) |
 | `verify-banner-opens-job.ts` | a tapped banner opens its job's tab and flashes it through the notification's path, and ✕ only dismisses (§13) |
 
 **UI changes are checked by rendering the real components**, not by reading them: a throwaway Vite

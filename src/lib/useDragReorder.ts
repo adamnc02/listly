@@ -63,7 +63,17 @@ function toIndexFromBefore(beforeIdx: number, fromIdx: number, count: number): n
   return beforeIdx - 1 // shifts down by one once the earlier dragged row is removed
 }
 
-export function useDragReorder(count: number, onReorder: (from: number, to: number) => void): DragReorder {
+/**
+ * `rowAttr` names the data attribute that marks a draggable row. It defaults
+ * to `data-drag-row`; a reorder whose rows CONTAIN another reorder's rows
+ * (shopping list cards, each holding item rows) must use its own, or the
+ * outer drag measures every inner item as a landing slot.
+ */
+export function useDragReorder(
+  count: number,
+  onReorder: (from: number, to: number) => void,
+  rowAttr = 'data-drag-row',
+): DragReorder {
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null)
   const [dropIndex, setDropIndex] = useState<number | null>(null)
 
@@ -109,11 +119,11 @@ export function useDragReorder(count: number, onReorder: (from: number, to: numb
       midpoints.current = []
       return
     }
-    midpoints.current = Array.from(el.querySelectorAll<HTMLElement>('[data-drag-row]')).map((row) => {
+    midpoints.current = Array.from(el.querySelectorAll<HTMLElement>(`[${rowAttr}]`)).map((row) => {
       const r = row.getBoundingClientRect()
       return r.top + r.height / 2
     })
-  }, [])
+  }, [rowAttr])
 
   /** The index the row would land before, from the pointer's Y. */
   const beforeIndexFor = useCallback((clientY: number): number => {

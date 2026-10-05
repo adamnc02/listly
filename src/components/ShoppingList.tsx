@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { List } from '../types'
 import { useListly, type ShopSnapshot } from '../context/ListlyContext'
-import { useDragReorder } from '../lib/useDragReorder'
+import { useDragReorder, type DragReorder } from '../lib/useDragReorder'
 import { Chevron, Grip, Plus, StarFilled, Tick, TickSmall } from './Icons'
 
 /**
@@ -15,11 +15,16 @@ export function ShoppingList({
   list,
   onEditItem,
   onPriceShop,
+  dragHandle,
+  dragging = false,
 }: {
   list: List
   onEditItem: (itemId: string) => void
   /** Called with the finished shop only when the D4 gate is open. */
   onPriceShop: (shop: ShopSnapshot) => void
+  /** The Shopping page's list reorder (§17): this card's grip handlers. */
+  dragHandle: ReturnType<DragReorder['handleProps']>
+  dragging?: boolean
 }) {
   const { device, setListOpen, addItem, toggleItem, reorderItems, snapshotShop, finishShop, ledgerGateOpen } =
     useListly()
@@ -68,21 +73,36 @@ export function ShoppingList({
   }
 
   return (
-    <section className={`card${open ? ' open' : ''}`}>
-      <button className="listhead" onClick={() => setListOpen(list.id, !open)} aria-expanded={open}>
-        <span style={{ color: 'var(--brown)' }}>
-          <Chevron />
+    <section className={`card${open ? ' open' : ''}${dragging ? ' dragging' : ''}`} data-drag-list>
+      {/* The grip is a SIBLING of the toggle button, never inside it: a
+          long-press to drag must not also open or close the card, and an
+          interactive element nested in a <button> is invalid HTML. */}
+      <div className="listhead">
+        <span
+          className="grip"
+          title="Hold, then drag to reorder"
+          role="button"
+          tabIndex={-1}
+          aria-label={`Reorder ${list.name}`}
+          {...dragHandle}
+        >
+          <Grip />
         </span>
-        <span className="name">{list.name}</span>
-        {list.isDefault && (
-          <span className="defmark" title="Default list">
-            <StarFilled />
-            <span className="sr">Default list</span>
+        <button className="listtoggle" onClick={() => setListOpen(list.id, !open)} aria-expanded={open}>
+          <span style={{ color: 'var(--brown)' }}>
+            <Chevron />
           </span>
-        )}
-        <span className="grow" />
-        <span className="pill">{count}</span>
-      </button>
+          <span className="name">{list.name}</span>
+          {list.isDefault && (
+            <span className="defmark" title="Default list">
+              <StarFilled />
+              <span className="sr">Default list</span>
+            </span>
+          )}
+          <span className="grow" />
+          <span className="pill">{count}</span>
+        </button>
+      </div>
 
       {open && (
         <div className="listbody">

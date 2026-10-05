@@ -368,10 +368,14 @@ main {
 }
 
 /* ---------- shopping lists ---------- */
-.listhead {
-  width: 100%;
+/* The header is the grip plus the toggle, side by side: the grip is never
+   inside the button, so a long-press to drag cannot also open the card. */
+.listhead { display: flex; align-items: stretch; }
+.listhead > .grip { width: 36px; padding-left: 12px; }
+.listtoggle {
+  flex: 1; min-width: 0;
   display: flex; align-items: center; gap: 10px;
-  padding: 12px 16px;
+  padding: 12px 16px 12px 4px;
   min-height: 60px;
   background: transparent;
   border: none;
@@ -434,6 +438,12 @@ main {
   background: var(--sage);
   box-shadow: 0 0 0 2px var(--paper);
 }
+
+/* Between list cards the cursor sits in the 14px .stack gap with a net
+   height of zero (3px tall, -8.5px above, +5.5px below), so drawing it moves
+   no card — the midpoints measured at drag start stay true. */
+.drop-cursor.between { margin: -8.5px 0 5.5px; }
+.card.dragging { opacity: .35; }
 
 .rows-dragging { touch-action: none; user-select: none; -webkit-user-select: none; }
 

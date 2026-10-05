@@ -1,5 +1,5 @@
 import { powerSyncDb } from './database'
-import { appendPosition, midpoint, positionOf, toDbId, type Row } from './mapping'
+import { appendPosition, byPosition, midpoint, positionOf, toDbId, type Row } from './mapping'
 import { newId } from '../ids'
 import { todayIso } from '../date'
 import type { IsoDate, JobDraft, JobPage, ShopCompletionDraft } from '../../types'
@@ -124,6 +124,23 @@ export async function repositionItem(listId: string, itemId: string, toIndex: nu
   const without = rows.filter((r) => r.id !== itemId)
   const pos = midpoint(positionOf(without[toIndex - 1]), positionOf(without[toIndex]))
   await powerSyncDb.execute('UPDATE lst_shopping_items SET position = ? WHERE id = ?', [pos, itemId])
+}
+
+/**
+ * Drag-to-reorder a list: one row's position changes. `toIndex` is into ALL
+ * the household's lists with the moved one removed, hidden lists included
+ * (`fullIndexForVisibleMove`). Sorted with `byPosition`, the same order the
+ * context renders, rather than SQL's ORDER BY, which puts a NULL position
+ * first where the context puts it last.
+ */
+export async function repositionList(householdId: string, listId: string, toIndex: number): Promise<void> {
+  const rows = await powerSyncDb.getAll<Row>(
+    'SELECT id, position FROM lst_shopping_lists WHERE household_id = ?',
+    [householdId],
+  )
+  const without = [...rows].sort(byPosition).filter((r) => r.id !== listId)
+  const pos = midpoint(positionOf(without[toIndex - 1]), positionOf(without[toIndex]))
+  await powerSyncDb.execute('UPDATE lst_shopping_lists SET position = ? WHERE id = ?', [pos, listId])
 }
 
 /** The ticked item names, in list order, before Finish shop deletes them. */

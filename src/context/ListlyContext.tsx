@@ -24,6 +24,7 @@ import {
 import type { LocationOption } from '../types'
 import { useWatchedQuery } from '../lib/powersync/useWatchedQuery'
 import { byPosition, rowToItem, rowToJob, rowToList } from '../lib/powersync/mapping'
+import { fullIndexForVisibleMove } from '../lib/listOrder'
 import * as writes from '../lib/powersync/writes'
 import { nextOccurrence } from '../lib/recurrence'
 
@@ -72,6 +73,8 @@ interface ListlyValue {
   saveItem: (listId: string, itemId: string, text: string, moveToListId: string, newListName: string) => void
   deleteItem: (listId: string, itemId: string) => void
   reorderItems: (listId: string, fromIndex: number, toIndex: number) => void
+  /** Drag a list among the VISIBLE lists; hidden lists keep their places. */
+  reorderLists: (fromIndex: number, toIndex: number) => void
   /**
    * What was ticked, WITHOUT changing anything. Read before the price sheet
    * opens, so the sheet can be cancelled and leave the list untouched.
@@ -307,6 +310,18 @@ export function ListlyProvider({ children }: { children: ReactNode }) {
     [lists],
   )
 
+  const reorderLists = useCallback(
+    (fromIndex: number, toIndex: number) => {
+      if (fromIndex === toIndex) return
+      const visibleIds = visibleLists.map((l) => l.id)
+      const id = visibleIds[fromIndex]
+      if (!id) return
+      const to = fullIndexForVisibleMove(lists.map((l) => l.id), visibleIds, fromIndex, toIndex)
+      run(writes.repositionList(householdId, id, to))
+    },
+    [householdId, lists, visibleLists],
+  )
+
   /**
    * 🚨 READ-ONLY. Nothing is deleted here, and that is the point.
    *
@@ -445,7 +460,7 @@ export function ListlyProvider({ children }: { children: ReactNode }) {
     () => ({
       lists, jobs, device, visibleLists,
       addList, deleteList, toggleDefault, setListOpen,
-      addItem, toggleItem, saveItem, deleteItem, reorderItems, snapshotShop, finishShop,
+      addItem, toggleItem, saveItem, deleteItem, reorderItems, reorderLists, snapshotShop, finishShop,
       jobsFor, addJob, toggleJob, toggleRemind, saveJob, deleteJob, setDoneOpen, householdSize,
       dismissBanner,
       ledgerGateOpen, categories, locationOptions, setListCategory,
@@ -454,7 +469,7 @@ export function ListlyProvider({ children }: { children: ReactNode }) {
     [
       lists, jobs, device, visibleLists,
       addList, deleteList, toggleDefault, setListOpen,
-      addItem, toggleItem, saveItem, deleteItem, reorderItems, snapshotShop, finishShop,
+      addItem, toggleItem, saveItem, deleteItem, reorderItems, reorderLists, snapshotShop, finishShop,
       jobsFor, addJob, toggleJob, toggleRemind, saveJob, deleteJob, setDoneOpen, householdSize,
       dismissBanner,
       ledgerGateOpen, categories, locationOptions, setListCategory,
