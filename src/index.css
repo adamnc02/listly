@@ -543,7 +543,6 @@ main {
    spacer keeps names in one column with the rows that do. */
 .grip-space { width: 22px; flex-shrink: 0; }
 .listhead > .grip-space { width: 30px; }
-.subhead { display: flex; justify-content: flex-end; padding: 0 4px; margin-top: -6px; }
 .jobcat .listbody { padding-top: 4px; }
 .jobform { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
 .jobform .line-input { width: 100%; font-size: 26px; }

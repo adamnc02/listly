@@ -632,10 +632,12 @@ component, on purpose.**
 > still `my_jobs` and the page id still `'mine'`, so `?tab=mine` from a notification keeps
 > opening it. Renaming a published table is what MIGRATION-LESSONS §19 forbids.
 
-The page is: a heading with "N to do", a **Done folder** and a **+**; a **Categories** button; then
-one collapsible card per category, and **Other** last. **There is no inline add form**: the + opens
-the same sheet a tap on a job does, because a job has a repeat and an alert to set as well as a name
-and a date.
+**The page is built like Shopping** (§8): a heading with the **Done folder** and a **Categories**
+button (where Shopping has Manage lists); one collapsible card per category, each with its own
+**"Add a job…"** row; **Other** last; and a dashed **"New category"** box at the bottom, as Shopping's
+"New list". There is no page-level +. A job is added by name into the card it belongs in, undated;
+its date, time, repeat, alert and category are set by tapping it, which opens the job sheet. Both
+add controls follow §19: `.waiting` when empty, a stated hint if tapped anyway, a named failure.
 
 ### Categories
 
@@ -645,8 +647,10 @@ Each page has its own categories — `house_job_categories` (shared with the hou
 definition of what the page shows, and `scripts/verify-job-categories.ts` holds it:
 
 - **One card per category, in the dragged category order, then Other.** A category card shows even
-  when empty ("Nothing here yet."), so it can be filled or deleted. **Other is not a row**: no grip,
-  no rename, no delete, always last, and absent when it holds nothing.
+  when empty ("Nothing in Garden yet."), so it can be filled or deleted. **Other is not a row**: no
+  grip, no rename, no delete, always last, and absent when it holds nothing — it is where jobs from
+  before categories wait to be filed, and it goes once they all have been. A job added in Other's
+  own add row has no category.
 - 🚨 **A job naming a category that does not exist here reads as Other.** Another phone can delete a
   category while this one files a job under it. Dropping such a job from every group would make it
   vanish from the page.

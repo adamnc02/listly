@@ -10,6 +10,7 @@ import { JobSheet } from '../components/JobSheet'
 import { DoneSheet } from '../components/DoneSheet'
 import { ManageCategoriesSheet } from '../components/ManageCategoriesSheet'
 import { Bell, Chevron, Folder, Grip, Plus, Sliders } from '../components/Icons'
+import { EMPTY_DRAFT } from '../lib/jobs'
 
 const TITLE: Record<JobPage, string> = { house: 'House jobs', mine: 'To-Do' }
 
@@ -29,17 +30,21 @@ const TITLE: Record<JobPage, string> = { house: 'House jobs', mine: 'To-Do' }
  * notifications keep working — renaming a published table is what
  * MIGRATION-LESSONS §19 forbids.
  *
- * The page is the page's categories, each a collapsible card in the
- * shopping-list design, dragged into order by its grip; then "Other" for
- * jobs with no category (lib/jobGroups.ts). There is no inline add form:
- * the + opens the same sheet a tap on a job does.
+ * The page is built like Shopping: the page's categories, each a
+ * collapsible card dragged into order by its grip, with its own "Add a
+ * job…" row; then "Other" for jobs with no category (lib/jobGroups.ts);
+ * then a dashed box that makes a new category. A job is added by name into
+ * its card; its date, repeat and alert are set by tapping it, which opens
+ * the job sheet.
  */
 export function JobsPage({
   page, flashJobId = null, flashKey = 0,
 }: { page: JobPage; flashJobId?: string | null; flashKey?: number }) {
-  const { jobsFor, jobs, jobCategories, device, setCategoryOpen, reorderJobCategories } = useListly()
-  // null = closed, 'new' = creating, otherwise the id being edited.
+  const { jobsFor, jobs, jobCategories, device, setCategoryOpen, reorderJobCategories, addJobCategory } = useListly()
+  // The id of the job being edited, or null.
   const [sheet, setSheet] = useState<string | null>(null)
+  const [catDraft, setCatDraft] = useState('')
+  const [catHint, setCatHint] = useState<string | null>(null)
   const [doneSheet, setDoneSheet] = useState(false)
   const [doneHint, setDoneHint] = useState(false)
   const [manageOpen, setManageOpen] = useState(false)
@@ -84,6 +89,19 @@ export function JobsPage({
     'data-drag-list',
   )
 
+  // The dashed box at the bottom, as Shopping's "New list": an empty field is
+  // stated, a failed write named (§19).
+  const submitCategory = () => {
+    if (!catDraft.trim()) {
+      setCatHint('Type a category name first, then tap Add category.')
+      return
+    }
+    setCatHint(null)
+    void addJobCategory(page, catDraft)
+      .then(() => setCatDraft(''))
+      .catch((e: unknown) => setCatHint(`Couldn't add it: ${e instanceof Error ? e.message : String(e)}`))
+  }
+
   const card = (g: JobGroup, drag?: { handle: ReturnType<DragReorder['handleProps']>; dragging: boolean }) => (
     <CategoryCard
       page={page}
@@ -102,7 +120,6 @@ export function JobsPage({
     <div className="stack">
       <div className="pagehead">
         <h1 className="grow">{TITLE[page]}</h1>
-        <span>{openCount} to do</span>
         {/* Done is a folder with a count, opening a sheet. With nothing done
             it is .waiting and says so if tapped (§19). */}
         <button
@@ -120,12 +137,6 @@ export function JobsPage({
           <Folder />
           {doneCount > 0 && <span className="done-count" aria-hidden="true">{doneCount}</span>}
         </button>
-        <button className="icon-btn round-add" onClick={() => setSheet('new')} aria-label={`Add a job to ${TITLE[page]}`}>
-          <Plus />
-        </button>
-      </div>
-
-      <div className="subhead">
         <button className="manage-btn" onClick={() => setManageOpen(true)}>
           <Sliders />
           Categories
@@ -152,9 +163,31 @@ export function JobsPage({
 
       {other && card(other)}
 
-      {openCount === 0 && categoryGroups.length === 0 && <div className="empty">All jobs done. Nice.</div>}
+      {openCount === 0 && categoryGroups.length === 0 && (
+        <div className="empty">No categories yet — start one below.</div>
+      )}
 
-      {sheet && <JobSheet page={page} jobId={sheet === 'new' ? null : sheet} onClose={() => setSheet(null)} />}
+      <div className="newlist">
+        <input
+          value={catDraft}
+          onChange={(e) => setCatDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') submitCategory()
+          }}
+          placeholder="New category, e.g. Garden"
+          aria-label="New category name"
+        />
+        <button className={`btn brown${catDraft.trim() ? '' : ' waiting'}`} onClick={submitCategory} type="button">
+          Add category
+        </button>
+      </div>
+      {catHint && !catDraft.trim() && (
+        <p className="help" style={{ color: 'var(--red)', padding: '0 6px' }} role="alert">
+          {catHint}
+        </p>
+      )}
+
+      {sheet && <JobSheet page={page} jobId={sheet} onClose={() => setSheet(null)} />}
       {doneSheet && <DoneSheet page={page} onClose={() => setDoneSheet(false)} />}
       {manageOpen && <ManageCategoriesSheet page={page} onClose={() => setManageOpen(false)} />}
     </div>
@@ -179,7 +212,9 @@ function CategoryCard({
   flashRow: RefObject<HTMLDivElement | null>
   drag?: { handle: ReturnType<DragReorder['handleProps']>; dragging: boolean }
 }) {
-  const { reorderJobs } = useListly()
+  const { reorderJobs, addJob } = useListly()
+  const [draft, setDraft] = useState('')
+  const [addHint, setAddHint] = useState<string | null>(null)
   const name = group.category?.name ?? 'Other'
   const count = group.dated.length + group.undated.length
   const undatedIds = group.undated.map((j) => j.id)
@@ -187,6 +222,21 @@ function CategoryCard({
     group.undated.length,
     (from, to) => reorderJobs(page, undatedIds, from, to),
   )
+
+  // Same rule as a list's "Add an item…": an empty field is stated, never
+  // silently ignored, and a failed write names itself (§19). The job lands
+  // in THIS card, undated; tapping it sets the rest.
+  const submit = () => {
+    const text = draft.trim()
+    if (!text) {
+      setAddHint('Type a job first.')
+      return
+    }
+    setAddHint(null)
+    void addJob(page, { ...EMPTY_DRAFT, text, categoryId: group.category?.id ?? '' })
+      .then(() => setDraft(''))
+      .catch((e: unknown) => setAddHint(`Couldn't add it: ${e instanceof Error ? e.message : String(e)}`))
+  }
 
   const row = (job: Job, grip?: ReturnType<DragReorder['handleProps']>, dragging = false) => (
     <JobRow
@@ -228,7 +278,7 @@ function CategoryCard({
 
       {open && (
         <div className="listbody">
-          {count === 0 && <div className="empty-note">Nothing here yet.</div>}
+          {count === 0 && <div className="empty-note">Nothing in {name} yet.</div>}
           {group.dated.map((job) => (
             <div key={job.id === flashJobId ? `${job.id}:${flashKey}` : job.id}>{row(job)}</div>
           ))}
@@ -241,6 +291,28 @@ function CategoryCard({
             ))}
             {dropIndex === group.undated.length && <div className="drop-cursor" role="presentation" />}
           </div>
+
+          <div className="addrow">
+            <input
+              className="line-input"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') submit()
+              }}
+              placeholder="Add a job…"
+              aria-label={`Add a job to ${name}`}
+              enterKeyHint="done"
+            />
+            <button className={`icon-btn round-add${draft.trim() ? '' : ' waiting'}`} onClick={submit} aria-label="Add job">
+              <Plus />
+            </button>
+          </div>
+          {addHint && !draft.trim() && (
+            <p className="help" style={{ color: 'var(--red)', padding: '0 8px' }} role="alert">
+              {addHint}
+            </p>
+          )}
         </div>
       )}
     </section>
