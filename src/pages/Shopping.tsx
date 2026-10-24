@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useListly, type ShopSnapshot } from '../context/ListlyContext'
 import { ShoppingList } from '../components/ShoppingList'
+import { listCount } from '../lib/lists'
+import { FocusHead } from '../components/FocusHead'
 import { ItemEditSheet } from '../components/ItemEditSheet'
 import { ManageListsSheet } from '../components/ManageListsSheet'
 import { FinishShopSheet } from '../components/FinishShopSheet'
@@ -10,7 +12,12 @@ import { Sliders } from '../components/Icons'
 import { ShoppingPushToggle } from '../components/ShoppingPushToggle'
 import { useDragReorder } from '../lib/useDragReorder'
 
-export function Shopping() {
+/**
+ * `laptop` is the laptop view (TECHNICAL.md §24): the page shows the ONE list
+ * picked in the rail, and its new-list box lives in the rail. Absent on a
+ * phone, where the page is exactly what it always was.
+ */
+export function Shopping({ laptop }: { laptop?: { focusId: string | null; extras: ReactNode } } = {}) {
   const { visibleLists, addList, finishShop, reorderLists } = useListly()
   const [pricing, setPricing] = useState<ShopSnapshot | null>(null)
   // The completion row just sent to the ledger, while its confirmation plays.
@@ -45,6 +52,59 @@ export function Shopping() {
     void addList(name, false)
       .then(() => setDraft(''))
       .catch((e: unknown) => setHint(`Couldn't add it: ${e instanceof Error ? e.message : String(e)}`))
+  }
+
+  // Every sheet and the confirmation, the same on both layouts.
+  const overlays = (
+    <>
+      {manageOpen && <ManageListsSheet onClose={() => setManageOpen(false)} />}
+      {pricing && (
+        <FinishShopSheet
+          shop={pricing}
+          // 🚨 Cancel changes NOTHING — the ticked items were never deleted.
+          onCancel={() => setPricing(null)}
+          // Saved, or explicitly finished without pricing: only now do the
+          // ticked items go and the list collapse. Only a Save hands back an
+          // id — "Don't price it" sent nothing, so there is nothing to confirm.
+          onComplete={(completionId) => {
+            void finishShop(pricing.listId, completionId)
+            setPricing(null)
+            if (completionId) setConfirming(completionId)
+          }}
+        />
+      )}
+      {confirming && <ShopConfirmation completionId={confirming} onDone={() => setConfirming(null)} />}
+      {editing && (
+        <ItemEditSheet
+          listId={editing.listId}
+          itemId={editing.itemId}
+          onClose={() => setEditing(null)}
+        />
+      )}
+    </>
+  )
+
+  if (laptop) {
+    const list = visibleLists.find((l) => l.id === laptop.focusId)
+    return (
+      <div className="stack">
+        <FocusHead page="Shopping" title={list?.name ?? 'Shopping'} isDefault={list?.isDefault} count={list ? listCount(list) : undefined}>
+          <button className="manage-btn" onClick={() => setManageOpen(true)}>
+            <Sliders />
+            Manage lists
+          </button>
+          {laptop.extras}
+        </FocusHead>
+        <LedgerErrors />
+        {list ? (
+          <ShoppingList list={list} focused onEditItem={(itemId) => setEditing({ listId: list.id, itemId })} onPriceShop={setPricing} />
+        ) : (
+          <div className="empty">No lists yet — add one in the side bar.</div>
+        )}
+        <ShoppingPushToggle />
+        {overlays}
+      </div>
+    )
   }
 
   return (
@@ -108,30 +168,7 @@ export function Shopping() {
       {/* The per-person shopping-notifications switch (TECHNICAL.md §23). */}
       <ShoppingPushToggle />
 
-      {manageOpen && <ManageListsSheet onClose={() => setManageOpen(false)} />}
-      {pricing && (
-        <FinishShopSheet
-          shop={pricing}
-          // 🚨 Cancel changes NOTHING — the ticked items were never deleted.
-          onCancel={() => setPricing(null)}
-          // Saved, or explicitly finished without pricing: only now do the
-          // ticked items go and the list collapse. Only a Save hands back an
-          // id — "Don't price it" sent nothing, so there is nothing to confirm.
-          onComplete={(completionId) => {
-            void finishShop(pricing.listId, completionId)
-            setPricing(null)
-            if (completionId) setConfirming(completionId)
-          }}
-        />
-      )}
-      {confirming && <ShopConfirmation completionId={confirming} onDone={() => setConfirming(null)} />}
-      {editing && (
-        <ItemEditSheet
-          listId={editing.listId}
-          itemId={editing.itemId}
-          onClose={() => setEditing(null)}
-        />
-      )}
+      {overlays}
     </div>
   )
 }

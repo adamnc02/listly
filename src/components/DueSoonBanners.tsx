@@ -1,6 +1,7 @@
 import { useListly } from '../context/ListlyContext'
 import { isDismissedToday } from '../lib/deviceState'
 import { dueLabel, dueSoonQueue } from '../lib/jobs'
+import { bannerQueueFor } from '../lib/laptop'
 import type { Job } from '../types'
 import { Close, Warn } from './Icons'
 
@@ -11,7 +12,9 @@ const SHORT = { house: 'House job', mine: 'To-Do' } as const
  *
  * Every OPEN job on either page that is due within 3 days or overdue is in
  * the queue, on EVERY tab — that is why this sits in App.tsx above the
- * router, not on the jobs pages.
+ * router, not on the jobs pages. The laptop view is the exception: it shows
+ * only the focused list's jobs (`focusKey`), and the rail's red counts carry
+ * the rest (TECHNICAL.md §24).
  *
  * ONE banner shows at a time, the soonest. A stack of full-size banners
  * pushes the list off a phone screen, so the rest wait behind it: a red count
@@ -32,11 +35,19 @@ const SHORT = { house: 'House job', mine: 'To-Do' } as const
  * not dealing with it. 🚨 ✕ stops its tap from reaching the banner, or every
  * dismiss would also jump tabs.
  */
-export function DueSoonBanners({ onOpen }: { onOpen: (job: Job) => void }) {
-  const { jobs, device, dismissBanner, householdSize } = useListly()
+export function DueSoonBanners({
+  onOpen, focusKey,
+}: {
+  onOpen: (job: Job) => void
+  /** The laptop view only (TECHNICAL.md §24): show just this job group's
+   *  jobs — null shows none, which is Shopping. Absent on a phone. */
+  focusKey?: string | null
+}) {
+  const { jobs, jobCategories, device, dismissBanner, householdSize } = useListly()
   // House jobs is hidden for a household of one, and so are its banners: a
   // banner for a tab you cannot open is a dead end.
-  const queue = dueSoonQueue(jobs, (id) => isDismissedToday(device, id), householdSize === 1)
+  const all = dueSoonQueue(jobs, (id) => isDismissedToday(device, id), householdSize === 1)
+  const queue = focusKey === undefined ? all : bannerQueueFor(all, focusKey, jobCategories)
   const job = queue[0]
   if (!job) return null
 

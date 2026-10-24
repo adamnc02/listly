@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { AuthGate } from './components/AuthGate'
 import { SyncRoot } from './components/SyncRoot'
@@ -10,6 +10,11 @@ import { JobsPage } from './pages/JobsPage'
 import { AccountModal } from './components/AccountModal'
 import { Me } from './components/Icons'
 import { SyncStatusDot } from './components/SyncStatusDot'
+import { Rail } from './components/Rail'
+import { useRailPages } from './lib/useRailPages'
+import { groupKeyOf } from './lib/jobGroups'
+import { loadLaptopState, saveLaptopState, type LaptopState } from './lib/laptop'
+import { useWide } from './lib/useWide'
 import icon from '/apple-touch-icon.png'
 
 export type { Tab } from './lib/openIntent'
@@ -85,9 +90,105 @@ function Shell() {
   // 0 means the membership has not synced yet, which is "unknown", and
   // hiding the tab on every cold start would make it flicker. If the tab is
   // hidden while showing, Shopping stands in.
-  const { householdSize } = useListly()
+  const { householdSize, jobs, jobCategories } = useListly()
   const showHouse = householdSize !== 1
   const shown: Tab = tab === 'house' && !showHouse ? 'shopping' : tab
+
+  // ── The laptop view (TECHNICAL.md §24) ─────────────────────────────────
+  // At 768px and wider (and 500px tall, so a sideways phone never counts)
+  // the pill becomes a side rail and each page shows the one list picked in
+  // it. Below that, everything after this block is unused.
+  const wide = useWide()
+  const [laptop, setLaptop] = useState<LaptopState>(loadLaptopState)
+  useEffect(() => saveLaptopState(laptop), [laptop])
+  const pages = useRailPages(laptop, showHouse)
+
+  // Only a pick writes `focus`; what a page SHOWS is resolved from it on
+  // every render (lib/laptop.ts resolveFocus), so a list that has not synced
+  // yet is not forgotten.
+  const focusOn = useCallback((page: Tab, id: string) => {
+    setLaptop((s) => (s.focus[page] === id ? s : { ...s, focus: { ...s.focus, [page]: id } }))
+  }, [])
+  const pick = useCallback(
+    (page: Tab, id: string) => {
+      setTab(page)
+      focusOn(page, id)
+    },
+    [focusOn],
+  )
+
+  // 🚨 A tapped reminder or banner flashes its job's row — and on a laptop
+  // only the focused group's rows exist, so the job's group must become the
+  // focus or the flash lands on nothing. Same reason, and same shape, as
+  // JobsPage opening a collapsed group for it.
+  const flashJob = flash ? jobs.find((j) => j.id === flash.id && !j.done) : undefined
+  const flashGroup = flashJob ? groupKeyOf(flashJob, jobCategories) : null
+  const flashPage = flashJob?.page
+  useEffect(() => {
+    if (wide && flashPage && flashGroup) focusOn(flashPage, flashGroup)
+  }, [wide, flashPage, flashGroup, flash?.n, focusOn])
+
+  if (wide) {
+    const focusOf = (page: Tab) => pages.find((p) => p.tab === page)?.focus ?? null
+    // The sync dot and the account button: in the phone's header; on a
+    // laptop, on the right of each page's title row.
+    const extras = (
+      <>
+        <SyncStatusDot />
+        <button
+          className="icon-btn"
+          style={{ color: 'var(--brown-2)' }}
+          onClick={() => setAccountOpen(true)}
+          aria-label="Account and household"
+        >
+          <Me />
+        </button>
+      </>
+    )
+    const banner = (page: Tab) => (
+      <DueSoonBanners onOpen={(job) => apply(jobOpenUrl(job))} focusKey={focusOf(page)} />
+    )
+    return (
+      <div className="app wide">
+        <Rail
+          pages={pages}
+          tab={shown}
+          collapsed={laptop.railCollapsed}
+          railOpen={laptop.railOpen}
+          onTab={setTab}
+          onPick={pick}
+          onToggleOpen={(page) =>
+            setLaptop((s) => ({ ...s, railOpen: { ...s.railOpen, [page]: !(s.railOpen[page] ?? page === shown) } }))
+          }
+          onToggleRail={() => setLaptop((s) => ({ ...s, railCollapsed: !s.railCollapsed }))}
+        />
+        <div className="main-wrap">
+          <main>
+            {shown === 'shopping' && <Shopping laptop={{ focusId: focusOf('shopping'), extras }} />}
+            {shown === 'house' && (
+              <JobsPage
+                page="house"
+                flashJobId={flash?.id ?? null}
+                flashKey={flash?.n ?? 0}
+                laptop={{ focusKey: focusOf('house'), extras, banner: banner('house') }}
+              />
+            )}
+            {shown === 'mine' && (
+              <JobsPage
+                page="mine"
+                flashJobId={flash?.id ?? null}
+                flashKey={flash?.n ?? 0}
+                laptop={{ focusKey: focusOf('mine'), extras, banner: banner('mine') }}
+              />
+            )}
+          </main>
+          <div className="edge-fade edge-fade-top" aria-hidden="true" />
+          <div className="edge-fade edge-fade-bottom" aria-hidden="true" />
+        </div>
+        {accountOpen && <AccountModal onClose={() => setAccountOpen(false)} />}
+      </div>
+    )
+  }
 
   return (
     <div className="app">

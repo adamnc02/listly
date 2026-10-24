@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { List } from '../types'
 import { useListly, type ShopSnapshot } from '../context/ListlyContext'
 import { useDragReorder, type DragReorder } from '../lib/useDragReorder'
+import { listCount } from '../lib/lists'
 import { Chevron, Grip, Plus, StarFilled, Tick, TickSmall } from './Icons'
 
 /**
@@ -17,14 +18,19 @@ export function ShoppingList({
   onPriceShop,
   dragHandle,
   dragging = false,
+  focused = false,
 }: {
   list: List
   onEditItem: (itemId: string) => void
   /** Called with the finished shop only when the D4 gate is open. */
   onPriceShop: (shop: ShopSnapshot) => void
   /** The Shopping page's list reorder (§17): this card's grip handlers. */
-  dragHandle: ReturnType<DragReorder['handleProps']>
+  dragHandle?: ReturnType<DragReorder['handleProps']>
   dragging?: boolean
+  /** The laptop view (TECHNICAL.md §24): the only list on the page. No
+   *  header — the page title names it — always open, and the add field
+   *  first. Nothing it does is any different. */
+  focused?: boolean
 }) {
   const { device, setListOpen, addItem, toggleItem, reorderItems, snapshotShop, finishShop, ledgerGateOpen } =
     useListly()
@@ -32,10 +38,10 @@ export function ShoppingList({
   const [addHint, setAddHint] = useState<string | null>(null)
   const [finishHint, setFinishHint] = useState<string | null>(null)
 
-  const open = device.openLists[list.id] ?? false
+  const open = focused || (device.openLists[list.id] ?? false)
   const left = list.items.filter((i) => !i.done).length
   const got = list.items.length - left
-  const count = list.items.length === 0 ? 'empty' : left ? `${left} to get` : 'all got'
+  const count = listCount(list)
 
   const { draggingIndex, dropIndex, containerRef, handleProps } = useDragReorder(
     list.items.length,
@@ -72,40 +78,79 @@ export function ShoppingList({
     }
   }
 
-  return (
-    <section className={`card${open ? ' open' : ''}${dragging ? ' dragging' : ''}`} data-drag-list>
-      {/* The grip is a SIBLING of the toggle button, never inside it: a
-          long-press to drag must not also open or close the card, and an
-          interactive element nested in a <button> is invalid HTML. */}
-      <div className="listhead">
-        <span
-          className="grip"
-          title="Hold, then drag to reorder"
-          role="button"
-          tabIndex={-1}
-          aria-label={`Reorder ${list.name}`}
-          {...dragHandle}
+  // The add field and its hint: after the items on a phone, first on a laptop
+  // (`focused`), where the page is for writing the list.
+  const addRow = (
+    <>
+      <div className="addrow">
+        <input
+          className="line-input"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') submit()
+          }}
+          placeholder="Add an item…"
+          aria-label={`Add an item to ${list.name}`}
+          // The phone keyboard keeps its "return" key useful for adding
+          // several items in a row, which is how a list actually gets
+          // written.
+          enterKeyHint="done"
+        />
+        <button
+          className={`icon-btn round-add${draft.trim() ? '' : ' waiting'}`}
+          onClick={submit}
+          aria-label="Add item"
         >
-          <Grip />
-        </span>
-        <button className="listtoggle" onClick={() => setListOpen(list.id, !open)} aria-expanded={open}>
-          <span style={{ color: 'var(--brown)' }}>
-            <Chevron />
-          </span>
-          <span className="name">{list.name}</span>
-          {list.isDefault && (
-            <span className="defmark" title="Default list">
-              <StarFilled />
-              <span className="sr">Default list</span>
-            </span>
-          )}
-          <span className="grow" />
-          <span className="pill">{count}</span>
+          <Plus />
         </button>
       </div>
 
+      {addHint && !draft.trim() && (
+        <p className="help" style={{ color: 'var(--red)', padding: '0 8px' }} role="alert">
+          {addHint}
+        </p>
+      )}
+    </>
+  )
+
+  return (
+    <section className={`card${open ? ' open' : ''}${dragging ? ' dragging' : ''}${focused ? ' focused' : ''}`} data-drag-list>
+      {/* The grip is a SIBLING of the toggle button, never inside it: a
+          long-press to drag must not also open or close the card, and an
+          interactive element nested in a <button> is invalid HTML. */}
+      {!focused && (
+        <div className="listhead">
+          <span
+            className="grip"
+            title="Hold, then drag to reorder"
+            role="button"
+            tabIndex={-1}
+            aria-label={`Reorder ${list.name}`}
+            {...dragHandle}
+          >
+            <Grip />
+          </span>
+          <button className="listtoggle" onClick={() => setListOpen(list.id, !open)} aria-expanded={open}>
+            <span style={{ color: 'var(--brown)' }}>
+              <Chevron />
+            </span>
+            <span className="name">{list.name}</span>
+            {list.isDefault && (
+              <span className="defmark" title="Default list">
+                <StarFilled />
+                <span className="sr">Default list</span>
+              </span>
+            )}
+            <span className="grow" />
+            <span className="pill">{count}</span>
+          </button>
+        </div>
+      )}
+
       {open && (
         <div className="listbody">
+          {focused && addRow}
           {list.items.length === 0 && <div className="empty-note">Nothing on this list yet.</div>}
 
           {/* The landing cursor is a real element in the flow, drawn before
@@ -148,35 +193,7 @@ export function ShoppingList({
             {dropIndex === list.items.length && <div className="drop-cursor" role="presentation" />}
           </div>
 
-          <div className="addrow">
-            <input
-              className="line-input"
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') submit()
-              }}
-              placeholder="Add an item…"
-              aria-label={`Add an item to ${list.name}`}
-              // The phone keyboard keeps its "return" key useful for adding
-              // several items in a row, which is how a list actually gets
-              // written.
-              enterKeyHint="done"
-            />
-            <button
-              className={`icon-btn round-add${draft.trim() ? '' : ' waiting'}`}
-              onClick={submit}
-              aria-label="Add item"
-            >
-              <Plus />
-            </button>
-          </div>
-
-          {addHint && !draft.trim() && (
-            <p className="help" style={{ color: 'var(--red)', padding: '0 8px' }} role="alert">
-              {addHint}
-            </p>
-          )}
+          {!focused && addRow}
 
           {finishHint && !got && (
             <p className="help" style={{ color: 'var(--red)', padding: '0 8px' }} role="alert">

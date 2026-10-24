@@ -56,6 +56,9 @@
        date underneath.
      - The tab bar is equal tabs (three, or two in a household of one), an icon above a label; the active tab
        is filled --brown with white text.
+     - On a laptop (TECHNICAL.md §24) the tab bar is a side rail in --rail:
+       the active page filled --brown, the shown list white with a --sage
+       ring. Its rules are at the end of this file.
    =========================================================================== */
 
 :root {
@@ -101,6 +104,10 @@
   --pill-ink: #5C7A4C;     /* count-pill text on --sage-wash */
   --grip: #C9B9A6;         /* the drag handle */
   --bell-off: #B5A594;     /* reminder OFF (ON is white on --sage) */
+  --rail: #ECE2D3;         /* the laptop rail: a step darker than --ground,
+                             never white (TECHNICAL.md §24). On it, use
+                             --soft for grey text: --muted is 4.05:1 there */
+  --rail-line: #DFD1BE;    /* the rail's edge, and its menu's border */
 
   /* Fallbacks only. index.html overwrites these with measured pixels on
      first paint; see its comment for why the CSS values cannot be trusted
@@ -1111,3 +1118,163 @@ html[data-keyboard='open'] .edge-fade-bottom { display: none; }
 .diag-details .lbl { margin-top: 10px; }
 .diag-dot { width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; margin-right: 4px; }
 .sheet { overflow-x: hidden; }
+
+/* ===========================================================================
+   THE LAPTOP VIEW (TECHNICAL.md §24) — 768px wide and 500px tall, and up.
+   lib/laptop.ts WIDE_QUERY is the switch; .app.wide is only ever rendered
+   when it matches, so these rules cannot reach a phone. The sheet rules at
+   the end use the same query, because sheets portal to <body>.
+   =========================================================================== */
+.app.wide { flex-direction: row; }
+.app.wide .main-wrap { flex: 1 1 0; min-width: 0; }
+.app.wide main { padding: 18px 32px 32px; }
+.app.wide .stack { max-width: 960px; }
+.app.wide .edge-fade-bottom { height: 24px; }
+
+/* 🚨 An <aside>, never a <nav>: `nav` above is the phone pill, styled and
+   hidden-with-the-keyboard globally, and index.html moves `.app > nav`. */
+.rail {
+  flex: 0 0 268px;
+  position: relative;
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 18px 12px 16px;
+  background: var(--rail);
+  border-right: 1.5px solid var(--rail-line);
+  overflow-y: auto;
+}
+.rail.min { flex-basis: 88px; align-items: center; padding: 18px 10px 16px; overflow: visible; }
+.rail-head { display: flex; align-items: center; gap: 12px; padding: 0 4px 16px; }
+.rail.min .rail-head { padding: 0 0 16px; }
+.rail-head img {
+  width: 46px; height: 46px;
+  border-radius: 13px;
+  object-fit: cover;
+  box-shadow: 0 1px 3px rgba(59, 47, 38, .15);
+}
+.rail-pages { display: flex; flex-direction: column; gap: 4px; }
+.rail.min .rail-pages { align-items: center; }
+.rail-page { display: flex; align-items: center; border-radius: 16px; color: var(--brown-2); }
+.rail-page.on { background: var(--brown); color: #fff; }
+.rail-go {
+  flex: 1; min-width: 0;
+  position: relative;
+  display: flex; align-items: center; gap: 12px;
+  height: 52px;
+  padding: 0 6px 0 14px;
+  border: none; border-radius: 16px;
+  background: transparent; color: inherit;
+  font-size: 23px; font-weight: 700;
+  text-align: left;
+}
+.rail.min .rail-page { width: 60px; }
+.rail.min .rail-go { height: 56px; padding: 0; justify-content: center; }
+.rail-chev {
+  width: 44px; height: 44px;
+  flex-shrink: 0;
+  display: grid; place-items: center;
+  padding: 0;
+  border: none; border-radius: 14px;
+  background: transparent; color: inherit;
+}
+.rail-chev[aria-expanded=true] .chev { transform: rotate(90deg); }
+.rail-entries { display: flex; flex-direction: column; gap: 2px; padding: 4px 0 10px 6px; }
+.rail-row { display: flex; align-items: center; gap: 2px; border-radius: 14px; }
+.rail-row.dragging { opacity: .35; }
+.rail-entry {
+  flex: 1; min-width: 0;
+  display: flex; align-items: center; gap: 8px;
+  min-height: 44px;
+  padding: 0 10px;
+  border: none; border-radius: 14px;
+  background: transparent; color: var(--ink);
+  font-size: 23px;
+  text-align: left;
+}
+.rail-entry .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rail-entry .pill { font-size: 18px; padding: 0 10px; }
+/* The list the page is showing: white with the sage ring, so it never reads
+   as a second "current page" beside the brown page row above it. */
+.rail-entry.on { background: var(--paper); box-shadow: inset 0 0 0 2px var(--sage); font-weight: 700; }
+.rail-add { flex: none; color: var(--brown-2); font-size: 21px; font-weight: 700; gap: 6px; }
+.rail-new { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 0 0 4px 10px; }
+.rail-new .line-input { font-size: 22px; }
+.rail-hint { width: 100%; margin: 0; font-size: 18px; color: var(--red); }
+.rail-empty { margin: 0; padding: 6px 10px; font-size: 20px; color: var(--soft); }
+/* Due-soon jobs in a list: the banner's red, as a count. On a laptop the
+   banner shows only the focused list's jobs, so this is how the rest of
+   them still reach you. */
+.due-n {
+  flex-shrink: 0;
+  min-width: 24px; height: 24px;
+  padding: 0 6px;
+  border-radius: 12px;
+  background: var(--red); color: #fff;
+  font-size: 17px; font-weight: 700;
+  line-height: 24px; text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.rail.min .rail-go .due-n { position: absolute; top: 2px; right: 0; box-shadow: 0 0 0 2px var(--rail); }
+.rail-toggle {
+  margin-top: auto;
+  align-self: flex-start;
+  margin-left: 4px;
+  width: 44px; height: 44px;
+  flex-shrink: 0;
+  display: grid; place-items: center;
+  padding: 0;
+  border: none; border-radius: 12px;
+  background: transparent; color: var(--soft);
+}
+.rail.min .rail-toggle { align-self: center; margin-left: 0; }
+/* The collapsed rail's menu of one page's lists. Inside the rail's own box
+   (not a portal: nothing above it scrolls or clips), above the fades (50)
+   and below the sheets (500). */
+.rail-fly {
+  position: absolute;
+  left: calc(100% - 6px);
+  z-index: 150;
+  width: 290px;
+  padding: 10px;
+  background: var(--paper);
+  border: 1.5px solid var(--rail-line);
+  border-radius: 18px;
+  box-shadow: 0 12px 32px rgba(59, 47, 38, .2);
+}
+.rail-fly h2 { margin: 0; padding: 4px 10px 6px; font-size: 26px; color: var(--brown); }
+.rail-fly .rail-entries { padding: 0; }
+@media (hover: hover) {
+  .rail-page:not(.on) .rail-go:hover,
+  .rail-page:not(.on) .rail-chev:hover,
+  .rail-entry:not(.on):hover,
+  .rail-toggle:hover { background: rgba(138, 94, 52, .08); }
+}
+
+/* The page's title row: the page small, the focused list as the heading. */
+.focushead { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 0 4px; }
+.focushead .eyebrow { font-size: 20px; line-height: 1; color: var(--muted); }
+.focushead h1 {
+  margin: 0;
+  display: flex; align-items: center; flex-wrap: wrap; gap: 10px;
+  font-size: 36px; line-height: 1.1; color: var(--brown);
+  overflow-wrap: anywhere;
+}
+.focushead h1 .pill { font-weight: 400; }
+/* The one card on the page: no header, the add field first and larger. */
+.card.focused .listbody { border-top: none; padding: 10px 14px 14px; }
+.card.focused .addrow { padding: 4px 4px 10px 8px; }
+.card.focused .addrow .line-input { height: 52px; font-size: 28px; }
+
+/* Sheets become a centred dialog over a full-window dim. */
+@media (min-width: 768px) and (min-height: 500px) {
+  .scrim { position: relative; max-width: none; justify-content: center; align-items: center; padding: 24px; }
+  .scrim .close-area { position: absolute; inset: 0; min-height: 0; }
+  .sheet {
+    position: relative;
+    width: min(600px, 100%);
+    max-height: 88%;
+    padding: 22px 26px 24px;
+    border-radius: 26px;
+    box-shadow: 0 18px 50px rgba(59, 47, 38, .28);
+  }
+  .sheet .handle { display: none; }
+}
