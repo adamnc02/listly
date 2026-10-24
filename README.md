@@ -8,6 +8,11 @@ transaction.
 Live at **https://adamnc02.github.io/listly/**, served from the `gh-pages` branch and installed on
 an iPhone Home Screen. **Listly targets iOS**; Android is out of scope.
 
+On a laptop or iPad (768px wide and 500px tall, and up) it has a **laptop view**: a collapsible side
+rail where each page opens out to its lists, and the window shows only the one picked there, with
+due-soon banners for that list alone. A phone always gets the phone layout, even turned sideways.
+`TECHNICAL.md` §24.
+
 ## Stack
 
 Vite · React 19 · TypeScript · Supabase (auth + Postgres) · PowerSync (offline-first sync).
@@ -225,6 +230,14 @@ as Other — **don't add the FK "for integrity"**.
 The guard also nulls a category that has not arrived yet, so **a new category is written, and
 awaited, before any job names it** — uploads go in local write order. And a tapped reminder **opens
 its job's card** even if it is collapsed on this phone, or the flash would land on nothing.
+
+### The laptop rail is an `<aside>`, never a `<nav>`.
+
+`nav` is styled globally as the phone's floating pill, hidden while the iOS keyboard is up, and
+moved by `index.html`'s script. A rail written as a `<nav>` inherits all three. And on a laptop
+the due-soon banner shows **only the focused list's jobs**, matched by the group a job renders
+under (`groupKeyOf`), never its raw `categoryId` — or a job whose category was deleted on the
+other phone would have no banner anywhere (`TECHNICAL.md` §24, `scripts/verify-laptop-view.ts`).
 
 ## Running it
 
