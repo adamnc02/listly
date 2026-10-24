@@ -1313,8 +1313,12 @@ the visible lists, categories with Other left out. "+ New list" / "+ New categor
 each page's rows is the phone page's dashed box, with the same empty-field and failed-write rules
 (§19); the new one is picked at once.
 
+The rail **starts collapsed** on every device, and stays expanded once expanded there.
+
 **Collapsed** (88px): the logo and the page icons only, with a page's total due-soon count on its
-icon. An icon opens a small menu of that page's rows beside the rail; picking one closes it, and
+icon. Hovering an icon (or focusing it from the keyboard) names its page at once, in a dark label
+beside it — a CSS `data-tip` label, not a native `title`, which waits a second and is the system
+font; it hides while that page's menu is open. An icon opens a small menu of that page's rows beside the rail; picking one closes it, and
 so do Escape and a click elsewhere.
 
 The **collapse button is at the foot** of the rail, BLOC Coach's `sidebar` icon (`Icons.tsx`). The
@@ -1361,7 +1365,12 @@ row that is not rendered — the laptop form of JobsPage opening a collapsed gro
 
 ### Per device
 
-`listly:laptop-state:v1` in localStorage: whether the rail is collapsed, which pages are opened
-out, and each page's pick. Never synced, like `deviceState.ts` (§6); every read and write is
+`listly:laptop-state:v1` in localStorage: whether the rail has been expanded (`railExpanded`),
+which pages are opened out, and each page's pick.
+
+> 🚨 **`railExpanded`, not `railCollapsed`.** The first release stored `railCollapsed`, and every
+> device wrote `false` on its first load, when expanded was the default — so `false` there records
+> the old default, not a choice. Reading it would keep every existing laptop expanded. It is
+> ignored and dropped on the next save; the verify script carries the version that reads it. Never synced, like `deviceState.ts` (§6); every read and write is
 wrapped, and anything unreadable means the defaults. A phone never reads it.
 

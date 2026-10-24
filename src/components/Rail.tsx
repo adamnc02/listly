@@ -12,9 +12,10 @@ const ICON: Record<Tab, ReactNode> = { shopping: <Basket />, house: <House />, m
 
 /**
  * The laptop view's side rail (TECHNICAL.md §24), replacing the bottom pill
- * at 768px and wider. Expanded: the logo, each page with its lists opened out
+ * at 768px and wider. It starts collapsed. Expanded: the logo, each page with its lists opened out
  * beneath it, and the collapse button at the foot. Collapsed: the logo and
- * the page icons only; an icon opens a small menu of that page's lists.
+ * the page icons only, each naming its page on hover; an icon opens a small
+ * menu of that page's lists.
  *
  * 🚨 It is an <aside> holding role="navigation", NEVER a <nav>. index.css
  * styles `nav` globally as the phone's floating pill and hides every `nav`
@@ -70,10 +71,12 @@ export function Rail({
             <div key={p.tab} className="rail-group">
               <div className={`rail-page${p.tab === tab ? ' on' : ''}`}>
                 <button
-                  className="rail-go"
+                  className={`rail-go${fly?.tab === p.tab ? ' flying' : ''}`}
                   aria-current={p.tab === tab ? 'page' : undefined}
                   aria-label={collapsed ? `${p.title}, show its lists` : undefined}
-                  title={collapsed ? p.title : undefined}
+                  // The collapsed rail's hover label (index.css): the page's
+                  // name, shown at once, unlike a native title.
+                  data-tip={collapsed ? p.title : undefined}
                   onClick={(e) => {
                     if (collapsed) {
                       const top = (e.currentTarget as HTMLElement).offsetTop
@@ -115,7 +118,8 @@ export function Rail({
         }}
         aria-expanded={!collapsed}
         aria-label={collapsed ? 'Expand the side bar' : 'Collapse the side bar'}
-        title={collapsed ? 'Expand' : 'Collapse'}
+        data-tip={collapsed ? 'Expand' : undefined}
+        title={collapsed ? undefined : 'Collapse'}
       >
         <Sidebar />
       </button>

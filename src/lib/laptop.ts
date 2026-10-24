@@ -22,7 +22,15 @@ import { groupKeyOf, type JobGroup } from './jobGroups'
 export const WIDE_QUERY = '(min-width: 768px) and (min-height: 500px)'
 
 export interface LaptopState {
-  railCollapsed: boolean
+  /**
+   * The rail starts COLLAPSED; this is true only once someone expands it on
+   * this device. 🚨 A new field, not a flipped default on the old
+   * `railCollapsed`: that one was written to storage on the first load of
+   * every device, so `false` there is the old default, not a choice, and
+   * honouring it would leave every existing laptop expanded. `railCollapsed`
+   * is ignored and dropped on the next save.
+   */
+  railExpanded: boolean
   /** The list id (Shopping) or job-group key (jobs pages) last picked on each page. */
   focus: Partial<Record<Tab, string>>
   /** Pages opened out to show their lists in the expanded rail. */
@@ -31,7 +39,7 @@ export interface LaptopState {
 
 const KEY = 'listly:laptop-state:v1'
 
-export const EMPTY_LAPTOP: LaptopState = { railCollapsed: false, focus: {}, railOpen: {} }
+export const EMPTY_LAPTOP: LaptopState = { railExpanded: false, focus: {}, railOpen: {} }
 
 /** Never throws: no storage, a private window or bad JSON all mean the defaults. */
 export function loadLaptopState(): LaptopState {
@@ -40,7 +48,7 @@ export function loadLaptopState(): LaptopState {
     if (!raw) return EMPTY_LAPTOP
     const p = JSON.parse(raw) as Partial<LaptopState>
     return {
-      railCollapsed: p.railCollapsed === true,
+      railExpanded: p.railExpanded === true,
       focus: p.focus && typeof p.focus === 'object' ? p.focus : {},
       railOpen: p.railOpen && typeof p.railOpen === 'object' ? p.railOpen : {},
     }

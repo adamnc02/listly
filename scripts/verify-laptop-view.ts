@@ -13,6 +13,10 @@
  *     RENDERS under hides a job filed under a deleted category for good —
  *     it shows in Other, and Other's banner would not include it. Control
  *     included.
+ *   - The rail opening expanded on laptops that already used it. Every device
+ *     saved `railCollapsed: false` on its first load, when expanded was the
+ *     default; honouring that would ignore the collapsed default. Control
+ *     included.
  *   - A phone switched to the laptop view by turning it sideways. An iPhone
  *     on its side is 844–932px wide; the query must also need height.
  *
@@ -129,9 +133,28 @@ check('rail counts cover every queued job', [...counts.values()].reduce((a, b) =
   const g = globalThis as { localStorage?: unknown }
   g.localStorage = { getItem: () => '{not json' }
   const s = loadLaptopState()
-  check('bad stored JSON falls back to defaults', s.railCollapsed === false && Object.keys(s.focus).length === 0)
+  check('bad stored JSON falls back to defaults', s.railExpanded === false && Object.keys(s.focus).length === 0)
   g.localStorage = { getItem: () => { throw new Error('denied') } }
-  check('storage that throws falls back to defaults', loadLaptopState().railCollapsed === false)
+  check('storage that throws falls back to defaults', loadLaptopState().railExpanded === false)
+}
+
+// ── the rail starts collapsed, including on laptops that already used it ──
+{
+  const g = globalThis as { localStorage?: unknown }
+  const stored = (v: object) => { g.localStorage = { getItem: () => JSON.stringify(v) } }
+  stored({})
+  check('a new device starts collapsed', loadLaptopState().railExpanded === false)
+  // What every device saved on its first load before the default changed.
+  const old = { railCollapsed: false, focus: { mine: 'work' }, railOpen: {} }
+  stored(old)
+  const s = loadLaptopState()
+  check('an old saved "railCollapsed: false" still starts collapsed', s.railExpanded === false)
+  check('…and keeps its remembered lists', s.focus.mine === 'work')
+  // Control: honouring the old field leaves every existing laptop expanded.
+  const honoured = !(old.railCollapsed === true)
+  check('control: reading the old field WOULD expand it', honoured === true)
+  stored({ railExpanded: true })
+  check('an explicit expand is remembered', loadLaptopState().railExpanded === true)
 }
 
 if (failed) {
