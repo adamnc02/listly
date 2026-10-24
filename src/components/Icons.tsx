@@ -144,6 +144,15 @@ export const Folder = () => (
   </Line>
 )
 
+/** The laptop rail's collapse/expand button: BLOC Coach's `sidebar` icon, a
+ *  panel with its side bar ruled off, already drawn to this 2px rule. */
+export const Sidebar = () => (
+  <Line size={22}>
+    <path d="M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" />
+    <path d="M9.5 4v16" />
+  </Line>
+)
+
 export const Trash = () => (
   <Line size={20}>
     <path d="M4.5 7h15" />

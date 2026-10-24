@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject } from 'react'
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import type { Job, JobPage } from '../types'
 import { useListly } from '../context/ListlyContext'
 import { dueLabel, isDueSoon } from '../lib/jobs'
@@ -11,6 +11,7 @@ import { DoneSheet } from '../components/DoneSheet'
 import { ManageCategoriesSheet } from '../components/ManageCategoriesSheet'
 import { Bell, Chevron, Folder, Grip, Plus, Sliders } from '../components/Icons'
 import { EMPTY_DRAFT } from '../lib/jobs'
+import { FocusHead } from '../components/FocusHead'
 
 const TITLE: Record<JobPage, string> = { house: 'House jobs', mine: 'To-Do' }
 
@@ -36,10 +37,19 @@ const TITLE: Record<JobPage, string> = { house: 'House jobs', mine: 'To-Do' }
  * then a dashed box that makes a new category. A job is added by name into
  * its card; its date, repeat and alert are set by tapping it, which opens
  * the job sheet.
+ *
+ * `laptop` is the laptop view (TECHNICAL.md §24): the page shows the ONE
+ * group picked in the rail, under its due-soon banner, and the new-category
+ * box lives in the rail. Absent on a phone.
  */
 export function JobsPage({
-  page, flashJobId = null, flashKey = 0,
-}: { page: JobPage; flashJobId?: string | null; flashKey?: number }) {
+  page, flashJobId = null, flashKey = 0, laptop,
+}: {
+  page: JobPage
+  flashJobId?: string | null
+  flashKey?: number
+  laptop?: { focusKey: string | null; extras: ReactNode; banner: ReactNode }
+}) {
   const { jobsFor, jobs, jobCategories, device, setCategoryOpen, reorderJobCategories, addJobCategory } = useListly()
   // The id of the job being edited, or null.
   const [sheet, setSheet] = useState<string | null>(null)
@@ -116,38 +126,88 @@ export function JobsPage({
     />
   )
 
+  const pageButtons = (
+    <>
+      {/* Done is a folder with a count, opening a sheet. With nothing done
+          it is .waiting and says so if tapped (§19). */}
+      <button
+        className={`icon-btn done-btn${doneCount ? '' : ' waiting'}`}
+        onClick={() => {
+          if (!doneCount) {
+            setDoneHint(true)
+            return
+          }
+          setDoneHint(false)
+          setDoneSheet(true)
+        }}
+        aria-label={`Done jobs, ${doneCount}`}
+      >
+        <Folder />
+        {doneCount > 0 && <span className="done-count" aria-hidden="true">{doneCount}</span>}
+      </button>
+      <button className="manage-btn" onClick={() => setManageOpen(true)}>
+        <Sliders />
+        Categories
+      </button>
+    </>
+  )
+  const doneNote = doneHint && !doneCount && (
+    <p className="help" style={{ padding: '0 6px' }} role="status">
+      Nothing done yet — ticked jobs go in the folder.
+    </p>
+  )
+  const overlays = (
+    <>
+      {sheet && <JobSheet page={page} jobId={sheet} onClose={() => setSheet(null)} />}
+      {doneSheet && <DoneSheet page={page} onClose={() => setDoneSheet(false)} />}
+      {manageOpen && <ManageCategoriesSheet page={page} onClose={() => setManageOpen(false)} />}
+    </>
+  )
+
+  if (laptop) {
+    const group = groups.find((g) => g.key === laptop.focusKey)
+    const name = group ? (group.category?.name ?? 'Other') : TITLE[page]
+    const count = group ? group.dated.length + group.undated.length : 0
+    return (
+      <div className="stack">
+        <FocusHead page={TITLE[page]} title={name} isDefault={group?.category?.isDefault} count={group ? (count ? `${count} to do` : 'empty') : undefined}>
+          {pageButtons}
+          {laptop.extras}
+        </FocusHead>
+        {laptop.banner}
+        {doneNote}
+        {group ? (
+          <CategoryCard
+            page={page}
+            group={group}
+            open
+            onToggle={() => {}}
+            onEdit={setSheet}
+            flashJobId={flashJobId}
+            flashKey={flashKey}
+            flashRow={flashRow}
+            focused
+          />
+        ) : (
+          <div className="empty">
+            {jobCategories.some((c) => c.page === page)
+              ? 'All jobs done. Nice.'
+              : 'No categories yet — add one in the side bar.'}
+          </div>
+        )}
+        {overlays}
+      </div>
+    )
+  }
+
   return (
     <div className="stack">
       <div className="pagehead">
         <h1 className="grow">{TITLE[page]}</h1>
-        {/* Done is a folder with a count, opening a sheet. With nothing done
-            it is .waiting and says so if tapped (§19). */}
-        <button
-          className={`icon-btn done-btn${doneCount ? '' : ' waiting'}`}
-          onClick={() => {
-            if (!doneCount) {
-              setDoneHint(true)
-              return
-            }
-            setDoneHint(false)
-            setDoneSheet(true)
-          }}
-          aria-label={`Done jobs, ${doneCount}`}
-        >
-          <Folder />
-          {doneCount > 0 && <span className="done-count" aria-hidden="true">{doneCount}</span>}
-        </button>
-        <button className="manage-btn" onClick={() => setManageOpen(true)}>
-          <Sliders />
-          Categories
-        </button>
+        {pageButtons}
       </div>
 
-      {doneHint && !doneCount && (
-        <p className="help" style={{ padding: '0 6px' }} role="status">
-          Nothing done yet — ticked jobs go in the folder.
-        </p>
-      )}
+      {doneNote}
 
       {categoryGroups.length > 0 && (
         <div className="stack" ref={catContainer}>
@@ -191,9 +251,7 @@ export function JobsPage({
         </p>
       )}
 
-      {sheet && <JobSheet page={page} jobId={sheet} onClose={() => setSheet(null)} />}
-      {doneSheet && <DoneSheet page={page} onClose={() => setDoneSheet(false)} />}
-      {manageOpen && <ManageCategoriesSheet page={page} onClose={() => setManageOpen(false)} />}
+      {overlays}
     </div>
   )
 }
@@ -204,7 +262,7 @@ export function JobsPage({
  * the card. Its own component because each card owns a drag hook.
  */
 function CategoryCard({
-  page, group, open, onToggle, onEdit, flashJobId, flashKey, flashRow, drag,
+  page, group, open, onToggle, onEdit, flashJobId, flashKey, flashRow, drag, focused = false,
 }: {
   page: JobPage
   group: JobGroup
@@ -215,6 +273,9 @@ function CategoryCard({
   flashKey: number
   flashRow: RefObject<HTMLDivElement | null>
   drag?: { handle: ReturnType<DragReorder['handleProps']>; dragging: boolean }
+  /** The laptop view: the only card on the page — no header, the add field
+   *  first. Its rows behave exactly as on a phone. */
+  focused?: boolean
 }) {
   const { reorderJobs, addJob } = useListly()
   const [draft, setDraft] = useState('')
@@ -253,35 +314,65 @@ function CategoryCard({
     />
   )
 
-  return (
-    <section className={`card jobcat${open ? ' open' : ''}${drag?.dragging ? ' dragging' : ''}`} data-drag-list={drag ? '' : undefined}>
-      <div className="listhead">
-        {drag ? (
-          <span
-            className="grip"
-            title="Hold, then drag to reorder"
-            role="button"
-            tabIndex={-1}
-            aria-label={`Reorder ${name}`}
-            {...drag.handle}
-          >
-            <Grip />
-          </span>
-        ) : (
-          <span className="grip-space" />
-        )}
-        <button className="listtoggle" onClick={onToggle} aria-expanded={open}>
-          <span style={{ color: 'var(--brown)' }}>
-            <Chevron />
-          </span>
-          <span className="name">{name}</span>
-          <span className="grow" />
-          <span className="pill">{count ? `${count} to do` : 'empty'}</span>
+  // The add field: after the rows on a phone, first on a laptop (`focused`).
+  const addRow = (
+    <>
+      <div className="addrow">
+        <input
+          className="line-input"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') submit()
+          }}
+          placeholder="Add a job…"
+          aria-label={`Add a job to ${name}`}
+          enterKeyHint="done"
+        />
+        <button className={`icon-btn round-add${draft.trim() ? '' : ' waiting'}`} onClick={submit} aria-label="Add job">
+          <Plus />
         </button>
       </div>
+      {addHint && !draft.trim() && (
+        <p className="help" style={{ color: 'var(--red)', padding: '0 8px' }} role="alert">
+          {addHint}
+        </p>
+      )}
+    </>
+  )
+
+  return (
+    <section className={`card jobcat${open ? ' open' : ''}${drag?.dragging ? ' dragging' : ''}${focused ? ' focused' : ''}`} data-drag-list={drag ? '' : undefined}>
+      {!focused && (
+        <div className="listhead">
+          {drag ? (
+            <span
+              className="grip"
+              title="Hold, then drag to reorder"
+              role="button"
+              tabIndex={-1}
+              aria-label={`Reorder ${name}`}
+              {...drag.handle}
+            >
+              <Grip />
+            </span>
+          ) : (
+            <span className="grip-space" />
+          )}
+          <button className="listtoggle" onClick={onToggle} aria-expanded={open}>
+            <span style={{ color: 'var(--brown)' }}>
+              <Chevron />
+            </span>
+            <span className="name">{name}</span>
+            <span className="grow" />
+            <span className="pill">{count ? `${count} to do` : 'empty'}</span>
+          </button>
+        </div>
+      )}
 
       {open && (
         <div className="listbody">
+          {focused && addRow}
           {count === 0 && <div className="empty-note">Nothing in {name} yet.</div>}
           {group.dated.map((job) => (
             <div key={job.id === flashJobId ? `${job.id}:${flashKey}` : job.id}>{row(job)}</div>
@@ -296,27 +387,7 @@ function CategoryCard({
             {dropIndex === group.undated.length && <div className="drop-cursor" role="presentation" />}
           </div>
 
-          <div className="addrow">
-            <input
-              className="line-input"
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') submit()
-              }}
-              placeholder="Add a job…"
-              aria-label={`Add a job to ${name}`}
-              enterKeyHint="done"
-            />
-            <button className={`icon-btn round-add${draft.trim() ? '' : ' waiting'}`} onClick={submit} aria-label="Add job">
-              <Plus />
-            </button>
-          </div>
-          {addHint && !draft.trim() && (
-            <p className="help" style={{ color: 'var(--red)', padding: '0 8px' }} role="alert">
-              {addHint}
-            </p>
-          )}
+          {!focused && addRow}
         </div>
       )}
     </section>

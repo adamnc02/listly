@@ -36,6 +36,7 @@ that must not be quietly undone. Start there; this is the map of everything else
 21. [Build, deploy and environment](#21-build-deploy-and-environment)
 22. [Module: Reminders (push only)](#22-module-reminders-push-only)
 23. [Module: Shopping notifications](#23-module-shopping-notifications)
+24. [The laptop view](#24-the-laptop-view)
 
 ---
 
@@ -87,6 +88,8 @@ src/
     SyncStatusDot.tsx     Is this actually syncing?
     SyncDiagnostics.tsx   Why not?
     BottomNav.tsx  Icons.tsx
+    Rail.tsx              The laptop view's side rail (§24)
+    FocusHead.tsx         The laptop view's title row (§24)
   lib/
     date.ts               A byte-identical copy of the ledger's
     ids.ts  jobs.ts  deviceState.ts  useDragReorder.ts
@@ -95,6 +98,8 @@ src/
     push.ts  pushState.ts  Web Push, the browser half (§22)
     shopConfirmation.ts   When the confirmation stops, and what it ends on (§9)
     syncHealth.ts         THE answer to "is this syncing?" — dot and panel share it (§18)
+    laptop.ts  useWide.ts  useRailPages.ts   The laptop view: its query, memory and rules (§24)
+    lists.ts              A list's count wording, shared by the card and the laptop title
     accountSwitch.ts      keep / clear / adopt the device's data on sign-in (§18)
     supabaseClient.ts
     powersync/            tables · schema · mapping · writes · connector · database
@@ -113,6 +118,9 @@ scripts/
 ---
 
 ## 2. The app shell
+
+This section is the **phone** shell. At 768px wide and 500px tall the same `Shell` renders the
+laptop view instead (§24).
 
 `App.tsx`'s `Shell` is: a header (logo, wordmark, sync dot, account button), the due-soon banner,
 a `.main-wrap` holding `<main>` plus its two edge fades, the bottom nav, and the account sheet.
@@ -891,6 +899,11 @@ scrolling while it is up**, restoring the previous value on unmount. 🚨 `.shee
 `min-width: 0` on flex children): a sheet must only ever scroll up and down (Adam, 2026-09-21 — the
 Sync check scrolled sideways on a long server URL).
 
+**On a wide screen a sheet is a centred dialog** (up to 600px wide) over a dim that covers the
+whole window; a tap anywhere outside it closes it. The switch is a media query on the same width
+and height as the laptop view (§24), because sheets portal to `<body>` and never sit inside
+`.app.wide`. The component is unchanged — only `index.css` differs.
+
 ---
 
 ## 17. Drag reordering
@@ -1275,4 +1288,80 @@ Stamped by the **server** default, never sent by the app (the column is not in `
 was added **without** back-filling: every item that existed before `20260925180000` is NULL and is
 never announced — otherwise the whole household's lists would have been pushed as "new" five
 minutes after the migration.
+
+---
+
+## 24. The laptop view
+
+At **768px wide and 500px tall**, and up, the bottom pill becomes a **side rail** and each page
+shows **one** list or job category — the one picked in the rail. Below that the app is the phone
+layout, unchanged. `lib/laptop.ts` holds the rules and `WIDE_QUERY`; `lib/useWide.ts` follows the
+query live, so resizing a window switches layout without a reload.
+
+> 🚨 **The height clause is what keeps phones out.** The manifest does not lock orientation, and
+> an iPhone on its side is 844–932px wide, so a width-only query would put a phone into the laptop
+> view. A sideways phone is under 500px tall; an iPad or laptop window never is.
+
+### The rail (`components/Rail.tsx`)
+
+**Expanded** (268px): the logo and "Listly", then each page — Shopping, House jobs (not in a
+household of one), To-Do. A page's chevron opens out its lists beneath it: the **visible** shopping
+lists (§8), or the job groups exactly as `groupJobs` builds them, Other last (§12). Each row shows
+its open count, the ★ of a default, and a red count of its due-soon jobs. A row reorders by
+long-press-drag on its grip, through the same writes as the phone's card grips (§17): lists among
+the visible lists, categories with Other left out. "+ New list" / "+ New category" at the foot of
+each page's rows is the phone page's dashed box, with the same empty-field and failed-write rules
+(§19); the new one is picked at once.
+
+**Collapsed** (88px): the logo and the page icons only, with a page's total due-soon count on its
+icon. An icon opens a small menu of that page's rows beside the rail; picking one closes it, and
+so do Escape and a click elsewhere.
+
+The **collapse button is at the foot** of the rail, BLOC Coach's `sidebar` icon (`Icons.tsx`). The
+rail is `--rail`, a step darker than `--ground` and never white; grey text on it is `--soft`,
+because `--muted` is only 4.05:1 there.
+
+> 🚨 **The rail is an `<aside>` holding `role="navigation"` — never a `<nav>`.** `index.css` styles
+> `nav` globally as the phone's floating pill and hides every `nav` while the iOS keyboard is up
+> (§2), and `index.html` sets `.app > nav`'s `bottom` by script. A `<nav>` rail inherits all three.
+
+### One list per page
+
+`useRailPages` (`lib/useRailPages.ts`) derives each page's rows and which one it shows, once, in
+the shell, so the rail and the page cannot disagree. `Shopping` and `JobsPage` take a `laptop`
+prop and render a title row (`FocusHead`: the page small, the list's name as the heading, its
+count, the page's own buttons, then the sync dot and account button, which live in the phone's
+header) and the one card in its **focused** form: no header, always open, the add field first.
+Everything else on the card — ticking, editing, Finish shop, dragging rows, the job sheet — is the
+phone's code, unchanged. Rows stay one column: `useDragReorder` measures vertically only (§17).
+
+A page shows its **remembered** pick if it is still there, else its first starred row, else its
+first (`resolveFocus`).
+
+> 🚨 **The pick is derived on every render and only a pick in the rail writes it.** On a cold
+> start the lists arrive a moment after the first render, so the remembered one is briefly
+> "missing". Writing the fallback back to storage would forget it, and the laptop would open on
+> the default list every time. `scripts/verify-laptop-view.ts` carries that version as a control.
+
+Finishing a shop that empties a non-default list hides that list (§8), so the page moves to the
+default list — the same rule as the phone page, where the card disappears.
+
+### Banners
+
+The due-soon banner (§13) shows **only the focused group's jobs**, so Shopping shows none. The
+rail's red counts are how the rest still reach you. Both come from the phone's `dueSoonQueue`, so
+order and dismissal are unchanged; `bannerQueueFor` and `dueCountByGroup` only filter and count.
+
+> 🚨 **A job is matched to a group by `groupKeyOf` — the group it renders under — never by
+> `categoryId`.** A job filed under a category deleted on the other phone renders in Other; a
+> `categoryId` match would leave it in no banner at all. The verify script has that control too.
+
+**A tapped reminder or banner focuses its job's group** (`App.tsx`), or the flash would land on a
+row that is not rendered — the laptop form of JobsPage opening a collapsed group for it (§12).
+
+### Per device
+
+`listly:laptop-state:v1` in localStorage: whether the rail is collapsed, which pages are opened
+out, and each page's pick. Never synced, like `deviceState.ts` (§6); every read and write is
+wrapped, and anything unreadable means the defaults. A phone never reads it.
 
