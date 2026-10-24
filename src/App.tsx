@@ -153,14 +153,14 @@ function Shell() {
         <Rail
           pages={pages}
           tab={shown}
-          collapsed={laptop.railCollapsed}
+          collapsed={!laptop.railExpanded}
           railOpen={laptop.railOpen}
           onTab={setTab}
           onPick={pick}
           onToggleOpen={(page) =>
             setLaptop((s) => ({ ...s, railOpen: { ...s.railOpen, [page]: !(s.railOpen[page] ?? page === shown) } }))
           }
-          onToggleRail={() => setLaptop((s) => ({ ...s, railCollapsed: !s.railCollapsed }))}
+          onToggleRail={() => setLaptop((s) => ({ ...s, railExpanded: !s.railExpanded }))}
         />
         <div className="main-wrap">
           <main>

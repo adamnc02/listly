@@ -1242,6 +1242,30 @@ html[data-keyboard='open'] .edge-fade-bottom { display: none; }
 }
 .rail-fly h2 { margin: 0; padding: 4px 10px 6px; font-size: 26px; color: var(--brown); }
 .rail-fly .rail-entries { padding: 0; }
+/* The collapsed rail names each page on hover (and keyboard focus), at once
+   and in the app's own type — a native title waits a second and is the
+   system font. Hidden while that page's menu is open, which names it too. */
+.rail.min .rail-toggle { position: relative; }
+.rail.min [data-tip]::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: calc(100% + 14px); top: 50%;
+  transform: translateY(-50%);
+  z-index: 160;
+  padding: 4px 12px;
+  border-radius: 10px;
+  background: var(--ink); color: var(--paper);
+  font-size: 20px; font-weight: 700; line-height: 1.2;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .12s;
+}
+.rail.min [data-tip]:focus-visible::after { opacity: 1; }
+.rail.min .flying::after { display: none; }
+@media (hover: hover) {
+  .rail.min [data-tip]:hover::after { opacity: 1; }
+}
 @media (hover: hover) {
   .rail-page:not(.on) .rail-go:hover,
   .rail-page:not(.on) .rail-chev:hover,
