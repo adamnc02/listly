@@ -1006,6 +1006,15 @@ scratch.
   check as "The start-up before this one".
 - **The sign-out warning.** If changes are waiting to upload, Sign out first says how many, that they
   send when this account signs back in, and that a different account signing in here would lose them.
+- 🚨 **No upload without a session** (`lib/powersync/uploadAuth.ts`, MIGRATION-LESSONS §77). With no
+  session — an access token that expired with no signal, then a refresh that failed — supabase-js
+  sends the publishable key as the bearer, PostgREST runs the upload as `anon`, and the server
+  answers `42501 permission denied`. That code is in the discard list, so before this every queued
+  write was thrown away, and the dot then read "Everything is synced" because the queue had emptied.
+  `uploadData()` now reads the session first and throws without one, so the writes stay queued (the
+  dot counts them, and "Nothing is lost" is true), and it sets the JWT on every request. A 42501
+  **privilege** refusal is retried; only an **RLS** refusal is discarded.
+  `scripts/verify-upload-auth.ts` covers both, with the old rule as the control.
 
 `components/SyncDiagnostics.tsx` is the "why not?" panel behind the dot. **The answer comes first,
 in plain words** — from `syncHealth()`, or from the first failed active check (sign-in, token,
